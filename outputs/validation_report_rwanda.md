@@ -44,6 +44,8 @@ Predicted cell shares are summed (population-weighted) per area and compared wit
 |---|---|---|---|---|---|---|---|---|
 | district | EICV7 2023/24 | served (grid+solar) | 30 | 0.054 | 0.018 | 0.748 | 0.388 | 0.306 |
 | sector | Census 2022 | served (grid+solar) | 415 | 0.133 | 0.127 | 0.752 | 0.509 | 0.299 |
+| sector | Census 2022 (C1.5) | grid connected | 415 | 0.085 | 0.019 | 0.818 | 0.654 | 0.535 |
+| sector | Census 2022 (C1.3 minus C1.5) | solar proxy (rough) | 415 | 0.111 | 0.108 | 0.618 | 0.664 | 0.048 |
 | province | EICV7 2023/24 | grid | 5 | 0.054 | 0.045 | 0.974 | 0.700 | 0.612 |
 | province | EICV7 2023/24 | solar | 5 | 0.032 | -0.030 | 0.986 | 0.900 | 0.576 |
 | province | Census 2022 | grid | 5 | 0.072 | 0.072 | 0.986 | 0.700 | 0.547 |
@@ -53,6 +55,8 @@ Skill = 1 minus MAE divided by the MAE of a flat map at the national mean. Bias 
 
 - Districts: MAE 0.054, skill 0.31, but rank order is weak (Spearman 0.39). The map gets district levels roughly right and their order only partly.
 - Sectors vs Census 2022: bias +0.127. Most of this is likely the 2022 vs 2025 timing gap (access grew between the two), not model error alone. After removing the bias, MAE is 0.082.
+- Grid share at 415 sectors vs Census Table C1.5 (households connected to the grid): Pearson 0.82, Spearman 0.65, MAE 0.085, skill 0.54. This is the strongest independent check: the grid pattern is predictable. "Connected" is not "grid is the main light", so read the pattern, not the level.
+- Solar proxy at the same sectors (electrified minus connected, clipped at 0): Pearson 0.62, Spearman 0.66, skill 0.05, bias +0.108. The proxy is rough (it gives 8.5% nationally against 13.9% in Table 8.12), so it supports the ranking of sectors but says nothing reliable about the level.
 - Provinces: Southern has the largest grid over-prediction vs EICV7 (+12.0 points).
 
 | province | grid_pred_minus_eicv7 | solar_pred_minus_eicv7 |
@@ -63,7 +67,7 @@ Skill = 1 minus MAE divided by the MAE of a flat map at the national mean. Bias 
 | Northern | +6.9 | -1.6 |
 | Southern | +12.0 | -6.1 |
 
-Only the served share can be checked below province level. The grid / solar split exists in published tables only by province.
+Below province level the solar share can only be checked through the rough proxy above. A direct grid / solar split exists in published tables only by province.
 
 ## 4. Solar vs unserved among non-grid households
 
@@ -82,7 +86,7 @@ The market-reality layer depends on separating solar from unserved households. T
 
 ## 5. What was not validated
 
-- No independent check of the solar vs unserved split below province level.
+- No direct check of the solar vs unserved split below province level (only the rough sector proxy above).
 - The World Bank Multi-Tier Framework (MTF) data was not used.
 - GOGLA sales are national and affiliate-only; see `calibration_note_rwanda.md`. The maps are not rescaled.
 - Time change was not tested, and no second country was run.

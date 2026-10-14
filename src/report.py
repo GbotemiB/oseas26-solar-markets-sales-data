@@ -114,6 +114,8 @@ def build_report(country: str, cv: pd.DataFrame, coverage: pd.DataFrame, target:
     ctl = control.set_index(["level", "source", "quantity"])
     district, sector = ctl.loc[("district", "EICV7 2023/24", "served (grid+solar)")], \
         ctl.loc[("sector", "Census 2022", "served (grid+solar)")]
+    sector_grid = ctl.loc[("sector", "Census 2022 (C1.5)", "grid connected")]
+    sector_solar = ctl.loc[("sector", "Census 2022 (C1.3 minus C1.5)", "solar proxy (rough)")]
     ratio = solar.set_index("model").loc["ratio model (7 core features)"]
     lights = solar.set_index("model").loc["lights only"]
 
@@ -148,11 +150,19 @@ def build_report(country: str, cv: pd.DataFrame, coverage: pd.DataFrame, target:
              f"(Spearman {district['spearman']:.2f}). The map gets district levels roughly right and their order only partly.",
              f"- Sectors vs Census 2022: bias {sector['bias']:+.3f}. Most of this is likely the 2022 vs 2025 timing gap "
              f"(access grew between the two), not model error alone. After removing the bias, MAE is {sector['mae_no_bias']:.3f}.",
+             f"- Grid share at {int(sector_grid['n'])} sectors vs Census Table C1.5 (households connected to the grid): "
+             f"Pearson {sector_grid['pearson']:.2f}, Spearman {sector_grid['spearman']:.2f}, MAE {sector_grid['mae']:.3f}, "
+             f"skill {sector_grid['skill']:.2f}. This is the strongest independent check: the grid pattern is predictable. "
+             "\"Connected\" is not \"grid is the main light\", so read the pattern, not the level.",
+             f"- Solar proxy at the same sectors (electrified minus connected, clipped at 0): Pearson {sector_solar['pearson']:.2f}, "
+             f"Spearman {sector_solar['spearman']:.2f}, skill {sector_solar['skill']:.2f}, bias {sector_solar['bias']:+.3f}. "
+             "The proxy is rough (it gives 8.5% nationally against 13.9% in Table 8.12), so it supports the ranking of "
+             "sectors but says nothing reliable about the level.",
              f"- Provinces: {worst['province']} has the largest grid over-prediction vs EICV7 "
              f"({worst['grid_pred_minus_eicv7']:+.1f} points).", "",
              md_table(prov, {"grid_pred_minus_eicv7": "{:+.1f}", "solar_pred_minus_eicv7": "{:+.1f}"}), "",
-             "Only the served share can be checked below province level. The grid / solar split exists in published "
-             "tables only by province.", "",
+             "Below province level the solar share can only be checked through the rough proxy above. A direct "
+             "grid / solar split exists in published tables only by province.", "",
              "## 4. Solar vs unserved among non-grid households", "",
              "The market-reality layer depends on separating solar from unserved households. Target: solar / (solar + unserved) "
              "among non-grid households, spatial CV, weighted by non-grid households.", "",
@@ -164,7 +174,7 @@ def build_report(country: str, cv: pd.DataFrame, coverage: pd.DataFrame, target:
              "- The decision rule (clearly better than night lights) is **not met**. The market-reality layer is a "
              "low-confidence hypothesis.", "",
              "## 5. What was not validated", "",
-             "- No independent check of the solar vs unserved split below province level.",
+             "- No direct check of the solar vs unserved split below province level (only the rough sector proxy above).",
              "- The World Bank Multi-Tier Framework (MTF) data was not used.",
              "- GOGLA sales are national and affiliate-only; see `calibration_note_" + country + ".md`. The maps are not rescaled.",
              "- Time change was not tested, and no second country was run.",

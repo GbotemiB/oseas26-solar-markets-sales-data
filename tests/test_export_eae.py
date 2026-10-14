@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 from rasterio.transform import from_origin
 
-from src.export_eae import market_reality, solar_test_sentence, to_geographic
+from src.export_eae import household_counts, market_reality, solar_test_sentence, to_geographic
 from src.predict import NODATA
 
 
@@ -59,3 +59,13 @@ def test_solar_test_sentence_quotes_the_numbers():
                          "skill": [0.084], "auc_solar_majority": [0.644]})
     text = solar_test_sentence(test)
     assert "472" in text and "0.185" in text and "8%" in text and "0.64" in text
+
+
+def test_household_counts_scale_to_the_national_total_and_keep_missing_cells_empty():
+    population = np.array([100.0, 300.0, 600.0, np.nan])
+    unserved = np.array([0.5, 0.1, np.nan, 0.9])
+    households, unserved_households = household_counts(population, unserved, 500.0)
+    assert np.nansum(households) == pytest.approx(500.0)                    # sums to the national count
+    assert households[:3] == pytest.approx([50.0, 150.0, 300.0])
+    assert unserved_households[:2] == pytest.approx([25.0, 15.0])
+    assert np.isnan(unserved_households[2]) and np.isnan(unserved_households[3])   # no share, no population

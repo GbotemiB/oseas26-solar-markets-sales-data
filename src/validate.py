@@ -7,6 +7,10 @@ Predicted shares are summed per area, weighted by population (WorldPop), and com
   - EICV7 (2023/24 survey) district share with electricity as main light, with its 95% interval
   - Census 2022 sector share with "electricity" as main light
   - EICV7 and Census 2022 grid vs solar split per province
+  - Census 2022 grid-connected share per sector (Table C1.5), and a rough solar proxy: electrified (C1.3) minus
+    connected (C1.5), clipped at 0. "Connected" is not "grid is the main light" (connected households can light
+    with something else), so its LEVEL is higher than our grid share by definition. Read the pattern
+    (pearson, spearman, mae_no_bias), not the bias.
 "Served" = grid + solar in our maps = 1 - unserved. This is NOT training data: the model never saw
 these tables. The numbers come from different years (Census Aug 2022, EICV7 Oct 2023 to Oct 2024, DHS 2025),
 and solar grew over that time, so some bias is expected, mostly in the Census comparison.
@@ -66,6 +70,18 @@ def compare(pred: np.ndarray, truth: np.ndarray, weights: np.ndarray = None, ci:
            "constant_mae": constant_mae, "skill": 1 - mae / constant_mae}
     if ci is not None:
         out["within_ci"] = float(((pred >= ci[0]) & (pred <= ci[1])).mean())
+    return out
+
+
+def add_grid_connected(sectors: pd.DataFrame, connected: pd.DataFrame) -> pd.DataFrame:
+    """Join the census grid-connected share to the sector table and derive the solar proxy.
+
+    `sectors` has district_key, sector_key and served (C1.3); `connected` has the same keys and connected (C1.5).
+    solar_proxy = max(served - connected, 0). Sectors without a C1.5 row are dropped.
+    """
+    out = sectors.merge(connected[["district_key", "sector_key", "connected"]],
+                        on=["district_key", "sector_key"], how="inner", validate="one_to_one")
+    out["solar_proxy"] = (out["served"] - out["connected"]).clip(lower=0)
     return out
 
 
@@ -140,8 +156,20 @@ def main() -> None:
           f"unmatched: {(left_out['district'] + ' / ' + left_out['sector']).tolist()}")
     summary.append({"level": "sector", "source": "Census 2022", "quantity": "served (grid+solar)",
                     **compare(s["pred_served"].to_numpy(), s["served"].to_numpy(), s["n_households"].to_numpy())})
-    s[["district", "sector", "pred_grid", "pred_solar", "pred_served", "served", "n_households"]] \
-        .rename(columns={"served": "census_served"}).to_csv(out_dir / f"control_totals_sectors_{args.country}.csv", index=False)
+    g = pd.read_csv(open_labels / "census_sector_grid.csv")
+    g["district_key"], g["sector_key"] = g["district"].map(norm_name), g["sector"].map(norm_name)
+    sg = add_grid_connected(s, g)
+    print(f"Sectors with a C1.5 grid-connected share: {len(sg)} of {len(s)}. Census national (household-weighted): "
+          f"connected {np.average(sg['connected'], weights=sg['n_households']):.3f}, "
+          f"solar proxy {np.average(sg['solar_proxy'], weights=sg['n_households']):.3f} (Table 8.12 solar: about 0.139)")
+    summary.append({"level": "sector", "source": "Census 2022 (C1.5)", "quantity": "grid connected",
+                    **compare(sg["pred_grid"].to_numpy(), sg["connected"].to_numpy(), sg["n_households"].to_numpy())})
+    summary.append({"level": "sector", "source": "Census 2022 (C1.3 minus C1.5)", "quantity": "solar proxy (rough)",
+                    **compare(sg["pred_solar"].to_numpy(), sg["solar_proxy"].to_numpy(), sg["n_households"].to_numpy())})
+    s = s.merge(sg[["district_key", "sector_key", "connected", "solar_proxy"]], on=["district_key", "sector_key"], how="left")
+    s[["district", "sector", "pred_grid", "pred_solar", "pred_served", "served", "connected", "solar_proxy", "n_households"]] \
+        .rename(columns={"served": "census_served", "connected": "census_grid_connected", "solar_proxy": "census_solar_proxy"}) \
+        .to_csv(out_dir / f"control_totals_sectors_{args.country}.csv", index=False)
 
     # ---- grid vs solar split per province
     ev = pd.read_csv(open_labels / "eicv7_province_lighting.csv")

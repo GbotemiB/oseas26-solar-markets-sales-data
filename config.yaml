@@ -40,7 +40,9 @@ calibration:
 
 # Market-reality layer for EAE (Energy Access Explorer), src.export_eae
 eae:
-  min_nongrid_share: 0.05     # cells where the predicted non-grid share is below this are no-data: the ratio is unstable there
+  # Cells where the predicted non-grid share is below this are no-data. The ratio unserved / (solar + unserved) rests on
+  # few households there, and at 0.05 the highest values were town edges (69% of cells above 0.8 had under 20% non-grid).
+  min_nongrid_share: 0.2
   utm_file_suffix: utm        # the UTM (grid) version is kept next to the EPSG:4326 headline file
 
 # Google Earth Engine

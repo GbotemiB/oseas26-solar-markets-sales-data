@@ -9,6 +9,7 @@ Writes tidy CSVs to data/processed/open_labels/ (public aggregates, no household
     eicv7_province_lighting.csv    grid / solar / other share per province (EICV7, 2023/24)
     census_sector_electricity.csv  share of households with "electricity" as main light, per sector (Census 2022)
     census_province_lighting.csv   household counts by grid / solar / lantern per province and area (Census 2022)
+    census_sector_grid.csv         share of households connected to the grid, per sector (Census 2022, Table C1.5)
 
 Definitions (checked against the tables):
   - EICV7 Table A5.14 "access to electricity" is 72.0% nationally = grid 49.96% + solar 22.1% (+ about 1% both).
@@ -16,6 +17,10 @@ Definitions (checked against the tables):
   - Census Table C1.3 "Electricity" is 61.0% nationally = grid 47.1% + solar 13.9% from Table 8.12.
     Lanterns (1.2%) are a separate column. Our solar label includes lanterns, so the census is slightly low.
   - Solar can only be split from grid at province level (EICV7 5.11, Census 8.12), not for districts or sectors.
+  - Census Table C1.5 gives, per sector, the share of households GRID CONNECTED (52.5% nationally). This is a
+    different question from the main light source: connected households can light with something else, so it is
+    higher than the 47.1% with grid as main light (Table 8.12). "Electrified (C1.3) minus connected (C1.5)" is
+    therefore only a rough proxy for solar (8.5% nationally against 13.9% in Table 8.12).
 """
 import re
 import unicodedata
@@ -101,6 +106,27 @@ def parse_census_sectors(rows: list) -> pd.DataFrame:
     return pd.DataFrame(out)
 
 
+def parse_census_sector_grid(rows: list) -> pd.DataFrame:
+    """Table C1.5: share of households connected to the grid, per district and sector.
+
+    Columns after the name: 4 shares (connected, not connected, not stated, total) then 4 counts (same order).
+    """
+    start = find_row(rows, "Grid connected Households")
+    header = [x.strip() for x in rows[start] if isinstance(x, str)]
+    assert header[1] == "Grid connected Households" and header[-1] == "Total", "C1.5 columns moved"
+    out, district = [], None
+    for row in rows[start + 1:]:
+        name, n = split_row(row)
+        if not n:
+            if name and not name.startswith("Source"):
+                district = name
+            continue
+        if name in ("Rwanda", "Total"):
+            continue
+        out.append({"district": district, "sector": name, "connected": n[0], "n_households": n[-1]})
+    return pd.DataFrame(out)
+
+
 def parse_census_provinces(rows: list) -> pd.DataFrame:
     """Table 8.12: household counts by grid, solar, lantern and total, per province and area (urban, rural, total)."""
     wanted = {GRID_ROW: "grid", "Solar power": "solar", "Lantern": "lantern", "Total": "total"}
@@ -132,6 +158,7 @@ def main() -> None:
         "eicv7_province_lighting": parse_eicv7_provinces(read_sheet(eicv7, "Table 5.11")),
         "census_sector_electricity": parse_census_sectors(read_sheet(census, "Table-C1.3")),
         "census_province_lighting": parse_census_provinces(read_sheet(census, "Table-8.12")),
+        "census_sector_grid": parse_census_sector_grid(read_sheet(census, "Table-C1.5")),
     }
     for name, table in tables.items():
         table.to_csv(out_dir / f"{name}.csv", index=False)
@@ -143,6 +170,9 @@ def main() -> None:
           f"solar {p.set_index('province').loc['Rwanda', 'share_solar']:.3f}")
     print(f"Census: {len(s)} sectors in {s['district'].nunique()} districts, "
           f"{int(s['n_households'].sum()):,} households")
+    g = tables["census_sector_grid"]
+    print(f"Census C1.5: {len(g)} sectors, national grid connected "
+          f"{(g['connected'] * g['n_households']).sum() / g['n_households'].sum():.3f}")
     nat = c[(c["province"] == "Rwanda") & (c["area"] == "total")].iloc[0]
     print(f"Census national: grid {nat['grid'] / nat['total']:.3f}, solar {nat['solar'] / nat['total']:.3f}, "
           f"lantern {nat['lantern'] / nat['total']:.3f}")

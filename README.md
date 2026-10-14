@@ -57,8 +57,9 @@ aggregated outputs are published.
 | 10. Control totals | `python -m src.download.nisr`, `python -m src.labels_open`, `python -m src.validate --country rwanda` | `outputs/control_totals_*_rwanda.csv` |
 | 11. Solar vs unserved test | `python -m src.solar_test --country rwanda` | `outputs/solar_vs_unserved_test_rwanda.csv` |
 | 12. GOGLA calibration note | `python -m src.calibrate --country rwanda` | `outputs/calibration_note_rwanda.md` |
-| 13. EAE market-reality layer | `python -m src.export_eae --country rwanda` | `outputs/rwanda_market_reality_eae.tif` (EPSG:4326), `..._utm.tif` |
+| 13. EAE market-reality layer | `python -m src.export_eae --country rwanda` | `outputs/rwanda_market_reality_eae.tif` (EPSG:4326), `..._utm.tif`, plus `rwanda_households.tif` and `rwanda_unserved_households.tif` (counts) |
 | 14. Validation report | `python -m src.report --country rwanda` | `outputs/validation_report_rwanda.md` |
+| 15. Web map | `python -m src.webmap --country rwanda` (or `--demo`) | `docs/map.html` (`docs/demo_map.html`): one self-contained file, open it in a browser |
 
 GEE = Google Earth Engine. The project ID is set in `config.yaml` (`gee.project`).
 If a layer fails or times out, rerun it as a Drive export, e.g.
@@ -71,7 +72,7 @@ publish the final ones through a release, not git.
 `rwanda_market_reality_eae.tif` holds, per 1 km cell, **unserved / (solar + unserved)**: the unserved share
 among households that are not on the grid. **1 = the off-grid solar market has failed to arrive, 0 = it has
 quietly succeeded.** The challenge brief did not fix a direction, so check it before mixing the layer with
-others. Cells with almost no non-grid households (non-grid share below 0.05) are no-data.
+others. Cells where fewer than 20% of households lack grid (non-grid share below 0.2) are no-data: the ratio rests on few households there, and at a 0.05 cut-off the highest values were town edges. Read it together with `rwanda_unserved_households.tif` (households with neither grid nor solar per cell): a high ratio over few households is small need.
 
 Treat it as a **low-confidence hypothesis**. Separating solar from unserved is only weakly predictable from
 open data (held-out error 0.185, 8% better than a flat map, not clearly better than night lights alone),
@@ -90,8 +91,9 @@ so the values are a gradient, not a clear split. Use it with `rwanda_do_not_trus
 - The unserved share is mostly torch users (about 26%), not the official access gap (about 12%).
 - GOGLA (Global Off-Grid Lighting Association) sales are national only and cover affiliate companies. The
   maps are **not** rescaled to them; the gap is reported in `outputs/calibration_note_rwanda.md`.
-- Independent checks exist only for the served share (grid + solar) by district and sector, and for the
-  grid/solar split by province. See `outputs/control_totals_*_rwanda.csv`.
+- Independent checks: the served share (grid + solar) by district and sector, the grid-connected share by sector
+  (Census C1.5), and the grid/solar split by province. Below province level solar is only checked through a rough
+  proxy. See `outputs/control_totals_*_rwanda.csv` and `outputs/validation_report_rwanda.md`.
 
 ## Licence
 

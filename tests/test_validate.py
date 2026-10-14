@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src.validate import compare, group_shares, match_report
+from src.validate import add_grid_connected, compare, group_shares, match_report
 
 
 def test_group_shares_weights_by_population_and_skips_empty_cells():
@@ -53,3 +53,11 @@ def test_compare_weights_and_interval_coverage():
 
 def test_match_report_lists_unmatched_names():
     assert match_report(pd.Series(["a", "b"]), pd.Series(["b", "c"])) == (["a"], ["c"])
+
+
+def test_add_grid_connected_derives_a_solar_proxy_clipped_at_zero_and_drops_unmatched():
+    sectors = pd.DataFrame({"district_key": ["a", "a", "b"], "sector_key": ["x", "y", "x"], "served": [0.8, 0.4, 0.6]})
+    connected = pd.DataFrame({"district_key": ["a", "a"], "sector_key": ["x", "y"], "connected": [0.5, 0.6]})
+    t = add_grid_connected(sectors, connected)
+    assert len(t) == 2                                              # ("b", "x") has no C1.5 row
+    assert t["solar_proxy"].tolist() == pytest.approx([0.3, 0.0])  # 0.4 - 0.6 is negative, so 0

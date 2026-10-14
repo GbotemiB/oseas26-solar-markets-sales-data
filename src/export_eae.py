@@ -11,6 +11,10 @@ It is a ratio between 0 and 1 already, so it is NOT min-max stretched (a stretch
 depend on which cells happen to be the extremes). Cells with almost no non-grid households
 (non-grid share below eae.min_nongrid_share) are no-data: darkness there says nothing about solar.
 
+Also writes the companion count layers, so a high ratio over few households is not read as big need:
+    <country>_households.tif               households per 1 km cell (population scaled to the national household count)
+    <country>_unserved_households.tif      households with neither grid nor solar per cell (not 0-1: a count)
+
 Outputs (outputs/):
     <country>_market_reality_eae.tif         EPSG:4326 headline file (config grid.crs_export)
     <country>_market_reality_eae_utm.tif     same layer on the 1 km UTM grid, no resampling
@@ -20,6 +24,7 @@ This layer is a LOW-CONFIDENCE HYPOTHESIS: solar versus unserved is only weakly 
 data (see outputs/solar_vs_unserved_test_*.csv). Use it together with <country>_do_not_trust.tif.
 """
 import argparse
+import json
 
 import numpy as np
 import pandas as pd
@@ -27,7 +32,7 @@ import rasterio
 from rasterio.warp import Resampling, calculate_default_transform, reproject
 
 from src.config import check_restricted_is_ignored, load_config, run_paths
-from src.predict import DEMO_NOTICE, NODATA, write_share_raster
+from src.predict import DEMO_NOTICE, NODATA, cells_to_raster, write_share_raster
 
 DIRECTION = ("1 = the off-grid solar market has failed to arrive (non-grid households are mostly unserved); "
              "0 = the market has quietly succeeded (non-grid households are mostly on solar). "
@@ -68,6 +73,18 @@ def solar_test_sentence(test: pd.DataFrame) -> str:
             f"a flat map, and it is not clearly better than night lights alone (AUC {row['auc_solar_majority']:.2f}).")
 
 
+def household_counts(population: np.ndarray, unserved: np.ndarray, households_total: float):
+    """Households per cell and unserved households per cell.
+
+    Population is scaled so that all cells together hold `households_total` households (the national count),
+    which avoids guessing a household size. Cells without a population are NaN; cells without a share prediction
+    are NaN in the unserved count only.
+    """
+    scale = households_total / np.nansum(population)
+    households = population * scale
+    return households, households * unserved
+
+
 # ---------------------------------------------------------------- main
 def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
@@ -79,7 +96,8 @@ def main(argv=None) -> None:
 
     check_restricted_is_ignored()
     cfg = load_config()
-    ecfg, out_dir = cfg["eae"], run_paths(cfg, args.country, args.demo)["out_dir"]
+    paths = run_paths(cfg, args.country, args.demo)
+    ecfg, out_dir = cfg["eae"], paths["out_dir"]
     c = args.country
 
     layers = {}
@@ -120,6 +138,7 @@ def main(argv=None) -> None:
                        "2 km (urban) and 5 km (rural). Night lights and satellite layers cannot see small solar systems. "
                        "Likely to misallocate capital toward places that look dark and remote to the model but already "
                        "have solar, and away from places with solar-like features but no market. "
+                       "The ratio can be high over very few households: read it with the unserved-households layer. "
                        "Not rescaled to GOGLA sales (see outputs/calibration_note_*.md).",
     }
 
@@ -130,6 +149,27 @@ def main(argv=None) -> None:
     geo, geo_transform = to_geographic(layer, transform, crs, cfg["grid"]["crs_export"])
     write_share_raster(out_dir / f"{c}_market_reality_eae.tif", geo, geo_transform, cfg["grid"]["crs_export"],
                        {**tags, "crs_note": "Reprojected from the 1 km UTM grid with bilinear resampling, about 1 km pixels"})
+    # ---- count layers (UTM 1 km grid only: counts must not be resampled)
+    cells = pd.read_csv(paths["features"], usecols=["cell_id", "population_total"]).merge(
+        pd.read_csv(paths["grid_cells"])[["cell_id", "row", "col"]], on="cell_id", validate="one_to_one")
+    spec = json.loads(paths["grid_spec"].read_text())
+    rows, cols, shape = cells["row"].to_numpy(), cells["col"].to_numpy(), (spec["height"], spec["width"])
+    population = cells["population_total"].to_numpy(dtype=float)
+    unserved = layers["unserved"][rows, cols].astype(float)
+    unserved[unserved == NODATA] = np.nan
+    total = float(np.nansum(population) / 4.0) if args.demo else float(cfg["calibration"]["households_total"])
+    households, unserved_households = household_counts(population, unserved, total)
+    count_tags = {**tags, "unit": "households per 1 km cell (a count, not a 0-1 index)", "crs_note": "UTM zone 35S, the 1 km model grid",
+                  "method": f"Population (WorldPop 2020) scaled so the cells hold {total:,.0f} households (national count"
+                            f"{' of the demo' if args.demo else ', EICV7 2023/24'}); unserved households = households x predicted "
+                            "unserved share. Not EAE-normalised: use it to size need, and the market-reality layer to rank."}
+    write_share_raster(out_dir / f"{c}_households.tif", cells_to_raster(households, rows, cols, shape), transform, str(crs),
+                       {**count_tags, "title": "Households per 1 km cell"})
+    write_share_raster(out_dir / f"{c}_unserved_households.tif", cells_to_raster(unserved_households, rows, cols, shape),
+                       transform, str(crs), {**count_tags, "title": "Unserved households per 1 km cell"})
+    top = np.sort(unserved_households[~np.isnan(unserved_households)])[::-1]
+    print(f"Unserved households: {np.nansum(unserved_households):,.0f} in total; the top 10% of cells hold "
+          f"{100 * top[:len(top) // 10].sum() / top.sum():.0f}% of them")
     print(f"Wrote {c}_market_reality_eae.tif ({geo.shape[1]} x {geo.shape[0]}, {cfg['grid']['crs_export']}) "
           f"and {c}_market_reality_eae_{ecfg['utm_file_suffix']}.tif")
 

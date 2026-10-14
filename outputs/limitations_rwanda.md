@@ -20,7 +20,7 @@ built from it is a low-confidence hypothesis.
 ## Where it will be wrong
 
 - **Solar versus unserved.** Held-out error is 0.185, only 8% better than a flat map and not clearly better than night
-  lights alone. Nine in ten cells score between 0.45 and 0.78, so read the layer as a ranking.
+  lights alone. Nine in ten cells score between 0.45 and 0.74, so read the layer as a ranking, together with the unserved-households layer.
 - **Levels.** Spatial cross-validation error is 0.154 per share (0.209 for a constant map). District rankings are weak
   (Spearman 0.39 against EICV7).
 - **Southern Province.** The grid share is over-predicted by about 12 points against EICV7.

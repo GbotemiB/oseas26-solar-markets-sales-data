@@ -234,8 +234,9 @@ and uncertainty, not model complexity.
 - [x] DHS access approved (Rwanda 2025, including GPS)
 - [x] DHS zips for RW, KE, NG in `data/restricted/dhs/<country>/`
 - [x] Grid/solar variable found (`hv262`); `src/labels_dhs.py` builds cluster labels
-- [x] Census 2022 and EICV7 downloaded and parsed (`src/labels_open.py`): grid/solar split only by province,
-      sector and district tables give served (grid + solar) only. MTF not used.
+- [x] Census 2022 and EICV7 downloaded and parsed (`src/labels_open.py`): grid/solar split only by province.
+      Sector tables give served (C1.3) and grid-connected (C1.5); solar below province is only a rough proxy
+      (C1.3 minus C1.5). MTF not used.
 - [x] GOGLA Rwanda sales found (2025 report, Figure 19, affiliates only); calibration note written, maps not rescaled
 - [x] Open question to organizers on the EAE layer direction was never answered: direction is documented as an assumption
 - [x] GEE features, 1 km grid, feature stack, model comparison (random vs spatial CV)

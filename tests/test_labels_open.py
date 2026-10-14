@@ -6,7 +6,7 @@ import zipfile
 
 import pytest
 
-from src.labels_open import (find_row, norm_name, parse_census_provinces, parse_census_sectors,
+from src.labels_open import (find_row, norm_name, parse_census_provinces, parse_census_sector_grid, parse_census_sectors,
                              parse_eicv7_districts, parse_eicv7_provinces, split_row)
 from src.xlsx import column_index, read_sheet
 
@@ -135,3 +135,26 @@ def test_parse_census_provinces_gives_counts_per_area():
     assert (nat["grid"], nat["solar"], nat["lantern"], nat["total"]) == (100.0, 43.0, 4.0, 200.0)
     south_rural = t[(t["province"] == "Southern") & (t["area"] == "rural")].iloc[0]
     assert south_rural["solar"] == 4.0
+
+
+def test_parse_census_sector_grid_reads_connected_share_and_count():
+    rows = [[None, "Table C1.5"],
+            [None, "District and Sectors", "Percentage", "Percentage", "Count", "Count"],
+            [None, "District and Sectors", "Grid connected Households", "Not connected Households", "Not stated", "Total",
+             "Grid connected Households", "Not connected Households", "Not stated", "Total"],
+            [None, "Rwanda", 0.525, 0.475, 0.0, 1.0, 1740316.0, 1572319.0, 108.0, 3312743.0],
+            [None, "Nyarugenge"],
+            [None, "  Gitega", 0.986, 0.014, 0.0, 1.0, 8121.0, 117.0, 1.0, 8239.0],
+            [None, "  Total", 0.9, 0.1, 0.0, 1.0, 9000.0, 1000.0, 0.0, 10000.0],
+            [None, "Gasabo"],
+            [None, "  Gitega", 0.5, 0.5, 0.0, 1.0, 100.0, 100.0, 0.0, 200.0],
+            [None, "Source: 5th census"]]
+    t = parse_census_sector_grid(rows)
+    assert t["district"].tolist() == ["Nyarugenge", "Gasabo"]
+    assert t["connected"].tolist() == [0.986, 0.5] and t["n_households"].tolist() == [8239.0, 200.0]
+
+
+def test_parse_census_sector_grid_stops_if_the_columns_move():
+    rows = [[None, "Table C1.5"], [None, "District and Sectors", "Grid connected Households", "Not connected Households"]]
+    with pytest.raises(AssertionError):
+        parse_census_sector_grid(rows)
