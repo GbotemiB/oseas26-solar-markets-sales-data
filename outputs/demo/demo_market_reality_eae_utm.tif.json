@@ -1,0 +1,14 @@
+{
+  "title": "Market-reality layer: unserved share among non-grid households, 1 km",
+  "country": "demo",
+  "unit": "ratio 0 to 1, unserved / (solar + unserved). Not min-max stretched.",
+  "direction": "1 = the off-grid solar market has failed to arrive (non-grid households are mostly unserved); 0 = the market has quietly succeeded (non-grid households are mostly on solar). Higher value = more need and more unmet demand. The challenge brief did not fix a direction, so check it before mixing this layer with EAE layers that run the other way.",
+  "no_data": "-9999. Cells with no prediction (missing feature, or own population below 1 per km2) and cells where the non-grid share is below 0.05 (the ratio is unstable there).",
+  "confidence": "LOW. Treat as a hypothesis about where the off-grid solar market has not arrived, not a finding. SYNTHETIC DEMO DATA: made up by src/make_demo_data.py to show that the pipeline runs. It is not Rwanda, not DHS data, and the numbers mean nothing for any real place.",
+  "use_with": "demo_do_not_trust.tif (flag codes: 1 widest ranges, 2 features outside the survey range, 3 both).",
+  "method": "Multinomial logistic regression on 7 open features, trained on DHS cluster shares; layer = predicted unserved share divided by predicted (solar + unserved) share. See the share rasters' tags.",
+  "sources": "Synthetic.",
+  "year": "None, synthetic.",
+  "limitations": "SYNTHETIC DEMO DATA: made up by src/make_demo_data.py to show that the pipeline runs. It is not Rwanda, not DHS data, and the numbers mean nothing for any real place.",
+  "crs_note": "UTM zone 35S, the 1 km model grid, no resampling"
+}

@@ -1,0 +1,10 @@
+{
+  "country": "demo (synthetic)",
+  "crs": "EPSG:32735",
+  "resolution_m": 1000,
+  "xmin": 800000.0,
+  "ymax": 9800000.0,
+  "width": 40,
+  "height": 40,
+  "n_cells_inside": 1600
+}

@@ -1,0 +1,33 @@
+# ---------------------------------------------------------------
+# DATA — never commit. DHS terms of use forbid sharing raw data.
+# ---------------------------------------------------------------
+data/raw/
+data/restricted/
+data/processed/
+
+# Safety net: DHS files anywhere in the repo (in case someone puts them in the wrong place)
+*DHS*.zip
+*DHS*.ZIP
+*.dta
+*.DTA
+*GE*FL.*
+*GC*FL.*
+*HR*FL.*
+*PR*FL.*
+
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.venv/
+venv/
+.env
+
+# Large generated rasters (publish final ones through releases, not git)
+outputs/**/*.tif
+!outputs/**/README.md
+
+# OS / editors
+.DS_Store
+.vscode/
+.idea/
