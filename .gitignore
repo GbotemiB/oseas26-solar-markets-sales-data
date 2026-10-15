@@ -31,3 +31,8 @@ outputs/**/*.tif
 .DS_Store
 .vscode/
 .idea/
+
+# Web maps built from real DHS-trained outputs: not published until the DHS terms check is done (docs/demo_map.html is synthetic and is committed)
+docs/map.html
+docs/*_map.html
+!docs/demo_map.html

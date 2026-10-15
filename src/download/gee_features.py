@@ -25,6 +25,7 @@ from src.config import load_config, repo_path
 
 NODATA = -9999
 MAX_DIRECT_BYTES = 30e6   # GEE direct download limit is about 32 MB
+TILE_PX = 2048            # larger layers are downloaded in tiles of this size (about 17 MB as float32)
 
 
 def target_projection(spec: dict, res: int) -> ee.Projection:
@@ -106,6 +107,54 @@ def build_layers(cfg: dict, iso3: str, proj: ee.Projection, region: ee.Geometry)
     return L
 
 
+def download_tiled(img, name, out_path, spec, res, width, height, tile_px=TILE_PX, workers=4) -> None:
+    """Download a layer that is too big for one request, in square tiles, into one GeoTIFF.
+
+    Each tile is a direct GEE download (at most tile_px x tile_px float32 pixels). The tiles are
+    written into a .part file and renamed when all are done, so a failed run leaves no half file.
+    """
+    import io
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+
+    import rasterio
+    from rasterio.transform import from_origin
+    from rasterio.windows import Window
+
+    tiles = [(r0, c0, min(tile_px, height - r0), min(tile_px, width - c0))
+             for r0 in range(0, height, tile_px) for c0 in range(0, width, tile_px)]
+
+    def fetch(tile):
+        r0, c0, h, w = tile
+        tf = [res, 0, spec["xmin"] + c0 * res, 0, -res, spec["ymax"] - r0 * res]
+        for attempt in range(1, 6):
+            try:
+                url = img.getDownloadURL({"name": f"{out_path.stem}_{r0}_{c0}", "crs": spec["crs"],
+                                          "crs_transform": tf, "dimensions": f"{w}x{h}", "format": "GEO_TIFF"})
+                r = requests.get(url, timeout=600)
+                if r.status_code == 200:
+                    with rasterio.open(io.BytesIO(r.content)) as src:
+                        return tile, src.read(1)
+                err = f"{r.status_code}: {r.text[:150]}"
+            except Exception as exc:          # network or GEE error: wait and try again
+                err = repr(exc)[:150]
+            time.sleep(5 * attempt)
+        raise RuntimeError(f"{name}: tile row {r0} col {c0} failed after 5 attempts ({err})")
+
+    part = out_path.with_name(out_path.name + ".part")
+    print(f"  {name}: too big for one request, downloading {len(tiles)} tiles of up to {tile_px} px")
+    with rasterio.open(part, "w", driver="GTiff", height=height, width=width, count=1, dtype="float32",
+                       crs=spec["crs"], transform=from_origin(spec["xmin"], spec["ymax"], res, res),
+                       nodata=NODATA, compress="deflate", tiled=True, BIGTIFF="YES") as dst, \
+            ThreadPoolExecutor(max_workers=workers) as pool:
+        for n, ((r0, c0, h, w), data) in enumerate(pool.map(fetch, tiles), 1):
+            dst.write(data.astype("float32"), 1, window=Window(c0, r0, w, h))
+            if n % 10 == 0 or n == len(tiles):
+                print(f"    {n}/{len(tiles)} tiles")
+    part.rename(out_path)
+    print(f"  {name}: saved {out_path.name} ({out_path.stat().st_size / 1e6:.1f} MB)")
+
+
 def export_layer(name, layer, spec, res, out_dir, drive_folder, use_drive) -> None:
     width, height = spec["width"] * spec["resolution_m"] // res, spec["height"] * spec["resolution_m"] // res
     transform = [res, 0, spec["xmin"], 0, -res, spec["ymax"]]
@@ -116,7 +165,14 @@ def export_layer(name, layer, spec, res, out_dir, drive_folder, use_drive) -> No
     (out_dir / f"{file_stem}.json").write_text(json.dumps(meta, indent=2))
 
     too_big = width * height * 4 > MAX_DIRECT_BYTES
-    if use_drive or too_big:
+    if too_big and not use_drive:
+        out_path = out_dir / f"{file_stem}.tif"
+        if out_path.exists():
+            print(f"  {name}: already there, skipping")
+            return
+        download_tiled(img, name, out_path, spec, res, width, height)
+        return
+    if use_drive:
         task = ee.batch.Export.image.toDrive(
             image=img, description=file_stem, folder=drive_folder, fileNamePrefix=file_stem,
             crs=spec["crs"], crsTransform=transform, dimensions=f"{width}x{height}", maxPixels=1e10)

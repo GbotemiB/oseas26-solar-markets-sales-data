@@ -105,6 +105,9 @@ def main() -> None:
     args = parser.parse_args()
 
     cfg = load_config()
+    if not cfg["countries"][args.country]["external_checks"]:
+        print(f"No external control totals for {args.country}: skipped (the NISR and EICV7 tables exist only for Rwanda).")
+        return
     processed, out_dir = repo_path(cfg["paths"]["processed"]), repo_path(cfg["paths"]["outputs"])
     open_labels = processed / "open_labels"
     boundaries = repo_path(cfg["boundaries"]["out_dir"])

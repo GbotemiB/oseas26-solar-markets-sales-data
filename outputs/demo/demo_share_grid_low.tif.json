@@ -5,7 +5,7 @@
   "coverage_check": "Nested spatial coverage: grid 82%, solar 82%, unserved 82%",
   "labels": "Synthetic clusters.",
   "feature_sources": "Synthetic.",
-  "limitations": "SYNTHETIC DEMO DATA: made up by src/make_demo_data.py to show that the pipeline runs. It is not Rwanda, not DHS data, and the numbers mean nothing for any real place. Modelled estimate from 560 survey clusters, not a census. Training label is the MAIN lighting source (DHS hv262), so households using grid plus solar count as grid. DHS cluster locations are displaced by up to 2 km (urban) and 5 km (rural). Solar versus unserved is separated less well than grid versus non-grid. Night lights and satellite layers cannot see small solar systems. Unserved here is mostly torch users (about 26% nationally), not the official access gap (about 12%). The range is calibrated on cluster-level errors, which include household sampling noise (about 25 households per cluster) and GPS displacement, so it is wider than the uncertainty of the true cell share. Coverage holds on average across districts, not for every cell.",
+  "limitations": "SYNTHETIC DEMO DATA: made up by src/make_demo_data.py to show that the pipeline runs. It is not Rwanda, not DHS data, and the numbers mean nothing for any real place. The range is calibrated on cluster-level errors, which include household sampling noise (about 25 households per cluster) and GPS displacement, so it is wider than the uncertainty of the true cell share. Coverage holds on average across districts, not for every cell.",
   "title": "Low end of the 80% range for the grid share, 1 km",
   "band": "share_grid_low"
 }

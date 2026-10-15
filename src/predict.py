@@ -29,17 +29,10 @@ import rasterio
 from rasterio.transform import from_origin
 
 from src.config import check_restricted_is_ignored, load_config, repo_path, run_paths
+from src.country_text import labels_tag, limitations_text
 from src.train import CLASSES, make_logistic_model
 
 NODATA = -9999
-
-LIMITATIONS = (
-    "Modelled estimate from 560 survey clusters, not a census. Training label is the MAIN lighting "
-    "source (DHS hv262), so households using grid plus solar count as grid. DHS cluster locations are "
-    "displaced by up to 2 km (urban) and 5 km (rural). Solar versus unserved is separated less well than "
-    "grid versus non-grid. Night lights and satellite layers cannot see small solar systems. "
-    "Unserved here is mostly torch users (about 26% nationally), not the official access gap (about 12%)."
-)
 
 DEMO_NOTICE = ("SYNTHETIC DEMO DATA: made up by src/make_demo_data.py to show that the pipeline runs. It is not "
                "Rwanda, not DHS data, and the numbers mean nothing for any real place.")
@@ -99,11 +92,11 @@ def district_table(districts: pd.Series, shares: np.ndarray, population: np.ndar
     return pd.DataFrame(rows)
 
 
-def layer_sources(features: list, gee_dir) -> list:
+def layer_sources(features: list, gee_dir, country: str) -> list:
     """Source and licence of each feature layer, read from the .json files written at download time."""
     out = []
     for f in features:
-        meta = json.loads((gee_dir / f"rwanda_{f}.json").read_text())
+        meta = json.loads((gee_dir / f"{country}_{f}.json").read_text())
         out.append(f"{f}: {meta['source']} [{meta['licence']}]")
     return out
 
@@ -134,6 +127,7 @@ def main(argv=None) -> None:
     out_dir = paths["out_dir"]
     np.random.seed(mcfg["seed"])
 
+    ccfg = None if args.demo else cfg["countries"][args.country]
     train = pd.read_csv(paths["train"]).dropna(subset=features).reset_index(drop=True)
     table = pd.read_csv(paths["features"])
     grid = pd.read_csv(paths["grid_cells"])[["cell_id", "row", "col"]]
@@ -152,21 +146,24 @@ def main(argv=None) -> None:
           f"below {mcfg['min_cell_population']} per km2, e.g. parks and lakes)")
     assert np.allclose(np.nansum(shares, axis=1)[~np.isnan(shares).any(axis=1)], 1.0)
 
+    if args.demo:
+        labels, year, limitations, sources = "Synthetic clusters.", "None, synthetic.", DEMO_NOTICE, "Synthetic."
+    else:
+        labels, limitations = labels_tag(ccfg), limitations_text(ccfg, len(train))
+        year = (f"Labels: fieldwork {ccfg['fieldwork']}. Features: WorldPop 2020, VIIRS 2024-2025, "
+                "GHSL 2020, Malaria Atlas Project travel time (2015 cities, 2019 health), SRTM")
+        sources = "; ".join(layer_sources(features, repo_path(cfg["gee"]["out_dir"]), args.country))
     tags = {
         "title": "Share of households by main lighting source, 1 km",
         "country": args.country,
         "unit": "share of households (0 to 1); grid + solar + unserved = 1",
         "method": f"Multinomial logistic regression on {len(features)} features, trained on DHS cluster "
                   f"shares weighted by households; features averaged within {mcfg['buffer_m']} m circles.",
-        "labels": "Rwanda DHS 2025 (DHS-8), restricted data. Only model-derived outputs are published.",
-        "feature_sources": "Synthetic." if args.demo else
-                           "; ".join(layer_sources(features, repo_path(cfg["gee"]["out_dir"]))),
-        "year": "Labels: fieldwork June to October 2025. Features: WorldPop 2020, VIIRS 2024-2025, "
-                "GHSL 2020, Malaria Atlas Project travel time (2015 cities, 2019 health), SRTM",
-        "limitations": LIMITATIONS,
+        "labels": labels,
+        "feature_sources": sources,
+        "year": year,
+        "limitations": limitations,
     }
-    if args.demo:
-        tags.update(labels="Synthetic clusters.", year="None, synthetic.", limitations=DEMO_NOTICE)
     out_dir.mkdir(parents=True, exist_ok=True)
     for k, cls in enumerate(CLASSES):
         raster = cells_to_raster(shares[:, k], cells["row"].to_numpy(), cells["col"].to_numpy(),

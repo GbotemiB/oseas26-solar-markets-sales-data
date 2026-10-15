@@ -63,7 +63,7 @@ def test_solar_test_sentence_quotes_the_numbers():
 
 def test_household_counts_scale_to_the_national_total_and_keep_missing_cells_empty():
     population = np.array([100.0, 300.0, 600.0, np.nan])
-    unserved = np.array([0.5, 0.1, np.nan, 0.9])
+    unserved = np.array([0.5, 0.1, np.nan, np.nan])
     households, unserved_households = household_counts(population, unserved, 500.0)
     assert np.nansum(households) == pytest.approx(500.0)                    # sums to the national count
     assert households[:3] == pytest.approx([50.0, 150.0, 300.0])

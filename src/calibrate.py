@@ -106,6 +106,9 @@ def main() -> None:
     parser.add_argument("--country", default="rwanda")
     args = parser.parse_args()
     cfg = load_config()
+    if not cfg["countries"][args.country]["external_checks"]:
+        print(f"No GOGLA calibration for {args.country}: skipped (the sales figures and household count in config are Rwanda only).")
+        return
     cal = cfg["calibration"]
     out_dir = repo_path(cfg["paths"]["outputs"])
     open_labels = repo_path(cfg["paths"]["processed"]) / "open_labels"

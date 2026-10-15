@@ -17,7 +17,12 @@ def download(iso3: str, level: str, out_dir) -> None:
     if out_path.exists():
         print(f"  {out_path.name} already there, skipping")
         return
-    meta = requests.get(API.format(iso3=iso3, level=level), timeout=60).json()
+    reply = requests.get(API.format(iso3=iso3, level=level), timeout=60)
+    if reply.status_code == 404:
+        print(f"  {iso3} has no {level} in geoBoundaries, skipping")
+        return
+    reply.raise_for_status()
+    meta = reply.json()
     data = requests.get(meta["gjDownloadURL"], timeout=300)
     data.raise_for_status()
     out_path.write_bytes(data.content)

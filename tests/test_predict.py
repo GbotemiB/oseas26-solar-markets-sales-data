@@ -109,4 +109,4 @@ def test_written_raster_has_metadata_nodata_and_matches_the_grid(tmp_path):
 
 def test_layer_sources_reads_the_download_sidecars(tmp_path):
     (tmp_path / "rwanda_population.json").write_text(json.dumps({"source": "WorldPop", "licence": "CC BY 4.0"}))
-    assert layer_sources(["population"], tmp_path) == ["population: WorldPop [CC BY 4.0]"]
+    assert layer_sources(["population"], tmp_path, "rwanda") == ["population: WorldPop [CC BY 4.0]"]

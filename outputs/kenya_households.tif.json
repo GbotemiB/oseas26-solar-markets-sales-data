@@ -1,0 +1,14 @@
+{
+  "title": "Households per 1 km cell",
+  "country": "kenya",
+  "unit": "households per 1 km cell (a count, not a 0-1 index)",
+  "direction": "1 = the off-grid solar market has failed to arrive (non-grid households are mostly unserved); 0 = the market has quietly succeeded (non-grid households are mostly on solar). Higher value = more need and more unmet demand. The challenge brief did not fix a direction, so check it before mixing this layer with EAE layers that run the other way.",
+  "no_data": "-9999. Cells with no prediction (missing feature, or own population below 1 per km2) and cells where the non-grid share is below 0.2 (the ratio is unstable there).",
+  "confidence": "LOW. Treat as a hypothesis about where the off-grid solar market has not arrived, not a finding. Held-out test (spatial CV, 1405 clusters with non-grid households): the model's error for the solar share among non-grid households is 0.190, only 22% better than a flat map, and it is not clearly better than night lights alone (AUC 0.80).",
+  "use_with": "kenya_do_not_trust.tif (flag codes: 1 widest ranges, 2 features outside the survey range, 3 both).",
+  "method": "Population (WorldPop 2020) scaled so the cells hold 14,437,157 households (population divided by the mean DHS household size (3.85 members)); unserved households = households x predicted unserved share. Not EAE-normalised: use it to size need, and the market-reality layer to rank.",
+  "sources": "Labels: Kenya DHS 2022 (DHS-8), restricted; only model-derived outputs are published. Features: WorldPop 2020 [CC BY 4.0], GHSL 2020 [CC BY 4.0], NASA Black Marble VIIRS 2024-2025, Malaria Atlas Project travel time [CC BY 4.0], SRTM [public domain]. This layer does not use the Meta Relative Wealth Index.",
+  "year": "Survey fieldwork 2022. Features 2015 to 2025.",
+  "limitations": "Unserved here means no grid and no solar as the main light source (mostly torch and fuel lighting), not the official access gap. Training label is the MAIN lighting source. DHS cluster locations are displaced by up to 2 km (urban) and 5 km (rural). Night lights and satellite layers cannot see small solar systems. Likely to misallocate capital toward places that look dark and remote to the model but already have solar, and away from places with solar-like features but no market. The ratio can be high over very few households: read it with the unserved-households layer.",
+  "crs_note": "EPSG:32737 (UTM), the 1 km model grid"
+}

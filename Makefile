@@ -16,9 +16,12 @@ C       := $(COUNTRY)
 OUT     := outputs
 PROC    := data/processed
 CFG     := config.yaml
+# Census, EICV7 and GOGLA inputs exist only for Rwanda (external_checks in config.yaml); other countries skip those steps
+MAP     := docs/$(if $(filter rwanda,$(C)),map,$(C)_map).html   # src.webmap names the file this way
+EXT     := $(if $(filter rwanda,$(C)),$(OUT)/control_totals_summary_$(C).csv $(OUT)/calibration_note_$(C).md,)
 
 .DEFAULT_GOAL := help
-.PHONY: help env test demo demo-map download pipeline naive report webmap clean clean-demo clean-cache check-dhs
+.PHONY: help env test demo demo-map download pipeline naive report webmap clean clean-demo clean-cache check-dhs compare
 
 help: ## show this list
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -46,7 +49,7 @@ download: ## download the open inputs (boundaries, Gridfinder, OSM, census); ski
 	$(PY) -m src.download.boundaries --country $(C)
 	$(PY) -m src.download.gridfinder
 	$(PY) -m src.download.osm --country $(C)
-	$(PY) -m src.download.nisr
+	$(if $(filter rwanda,$(C)),$(PY) -m src.download.nisr)
 	@echo "Google Earth Engine layers are separate (needs 'earthengine authenticate'):"
 	@echo "  $(PY) -m src.download.gee_features --country $(C)"
 
@@ -87,17 +90,20 @@ $(OUT)/$(C)_market_reality_eae.tif: $(OUT)/$(C)_do_not_trust.tif $(OUT)/solar_vs
 $(OUT)/naive_baseline_$(C).csv: $(OUT)/$(C)_market_reality_eae.tif
 	$(PY) -m src.naive_baseline --country $(C)
 
-$(OUT)/validation_report_$(C).md: $(OUT)/cv_results_$(C).csv $(OUT)/control_totals_summary_$(C).csv $(OUT)/solar_vs_unserved_test_$(C).csv $(OUT)/calibration_note_$(C).md $(OUT)/$(C)_market_reality_eae.tif $(OUT)/naive_baseline_$(C).csv
+$(OUT)/validation_report_$(C).md: $(OUT)/cv_results_$(C).csv $(EXT) $(OUT)/solar_vs_unserved_test_$(C).csv $(OUT)/$(C)_market_reality_eae.tif $(OUT)/naive_baseline_$(C).csv
 	$(PY) -m src.report --country $(C)
 
-docs/map.html: $(OUT)/$(C)_market_reality_eae.tif $(OUT)/$(C)_do_not_trust.tif
+$(MAP): $(OUT)/$(C)_market_reality_eae.tif $(OUT)/$(C)_do_not_trust.tif
 	$(PY) -m src.webmap --country $(C)
 
 naive: $(OUT)/naive_baseline_$(C).csv ## compare our layer with the naive "dense and dark" index
 report: $(OUT)/validation_report_$(C).md ## build the validation report
-webmap: docs/map.html ## build the web map (docs/map.html, real data, do not publish before the DHS check)
+webmap: $(MAP) ## build the web map (docs/map.html, real data, do not publish before the DHS check)
 
 pipeline: report webmap ## real run, every step from the features to the report and web map (after: make download)
+
+compare: ## side-by-side comparison of the country runs (outputs/cross_country_summary.md)
+	$(PY) -m src.cross_country
 
 # ---------------------------------------------------------------- clean
 clean-demo: ## delete the demo outputs and the demo web map

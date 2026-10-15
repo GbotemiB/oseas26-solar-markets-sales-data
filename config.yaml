@@ -138,6 +138,12 @@ countries:
     household_file: RWHR91FL.dta
     gps_file: RWGE91FL.shp
     label_rule: lighting
+    display_name: Rwanda
+    fieldwork: "June to October 2025"
+    external_checks: true   # NISR (EICV7, Census 2022) and GOGLA inputs exist: control totals and calibration note
+    unserved_note: "Unserved here is mostly torch users (about 26% nationally), not the official access gap (about 12%)."
+    label_note: ""
+    frame_note: ""
   kenya:
     geofabrik: africa/kenya
     code: KE
@@ -149,6 +155,12 @@ countries:
     household_file: KEHR8CFL.dta
     gps_file: KEGE8AFL.shp
     label_rule: lighting
+    display_name: Kenya
+    fieldwork: "2022"
+    external_checks: false
+    unserved_note: "Unserved here means no grid and no solar as the main light source (mostly torch and fuel lighting), not the official access gap."
+    label_note: ""
+    frame_note: "National shares from the map are about 8 points lower on grid and 7 higher on unserved than the survey. Mostly this is weighting: the map weights cells by people, the survey weights households, and urban households are smaller; WorldPop also places more people in the remote north-east than the survey sample does. Cell predictions are unbiased where clusters exist. Quote rankings, not national levels."
   nigeria:
     geofabrik: africa/nigeria
     code: NG
@@ -160,6 +172,12 @@ countries:
     household_file: NGHR8BFL.dta
     gps_file: NGGE8AFL.shp
     label_rule: electricity_then_lighting
+    display_name: Nigeria
+    fieldwork: "2023 to 2024"
+    external_checks: false
+    unserved_note: "Unserved here means no electricity and no solar as the main light source (mostly torch and fuel lighting), not the official access gap."
+    label_note: "Households with electricity whose main light is a torch (power cuts) are counted as grid, so the grid share mixes grid access with grid supply (flag share_grid_unreliable)."
+    frame_note: "National shares from the map are about 6 points lower on grid and 6 higher on unserved than the survey, mostly because the map weights cells by people and the survey weights households (urban households are smaller, and WorldPop puts fewer people in urban cells than the survey sample does). Quote rankings, not national levels."
 
 # Naive "dense and dark" baseline (src.naive_baseline): population x darkness, compared with our market-reality layer.
 # Also uses eae.min_nongrid_share and model.min_cell_population.

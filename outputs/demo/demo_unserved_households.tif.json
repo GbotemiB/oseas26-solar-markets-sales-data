@@ -10,5 +10,5 @@
   "sources": "Synthetic.",
   "year": "None, synthetic.",
   "limitations": "SYNTHETIC DEMO DATA: made up by src/make_demo_data.py to show that the pipeline runs. It is not Rwanda, not DHS data, and the numbers mean nothing for any real place.",
-  "crs_note": "UTM zone 35S, the 1 km model grid"
+  "crs_note": "EPSG:32735 (UTM), the 1 km model grid"
 }

@@ -90,12 +90,12 @@ Naive index = population x darkness (from night lights), the method the challeng
 
 - Cells: Spearman correlation between the naive index and our layer -0.18. 13% of the naive top 10% is also in our top 10% (18% counted in unserved households; chance 10%). Our mask flags 53% of the naive top 10%; predicted solar share there is 23% against 20% nationally.
 - Held-out districts (389 clusters): AUC for the top tercile of the survey unserved / (solar + unserved) is 0.48 for the naive index, 0.39 for night lights alone and 0.70 for our model. Ours minus naive: +0.22 (95% interval +0.10 to +0.34).
-- Same folds as section 1. The naive index and lights are not fitted; our model is. Section 4 scores the error of the solar share, this section scores the ranking, so the two tests need not agree. Details in `naive_baseline_<country>.md`.
+- Same folds as section 1. The naive index and lights are not fitted; our model is. Section 4 scores the error of the solar share, this section scores the ranking, so the two tests need not agree. Details in `naive_baseline_rwanda.md`.
 
 ## 6. What was not validated
 
 - No direct check of the solar vs unserved split below province level (only the rough sector proxy above).
 - The World Bank Multi-Tier Framework (MTF) data was not used.
 - GOGLA sales are national and affiliate-only; see `calibration_note_rwanda.md`. The maps are not rescaled.
-- Time change was not tested, and no second country was run.
 - One of 416 census sectors did not match a boundary name.
+- Time change was not tested.

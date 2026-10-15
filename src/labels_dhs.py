@@ -21,6 +21,7 @@ rows or cluster coordinates.
 from __future__ import annotations
 
 import argparse
+import json
 import zipfile
 from pathlib import Path
 
@@ -36,7 +37,7 @@ LIGHT_SOLAR = 2          # "Solar lantern" / "Solar lantern/standalone solar sys
 LIGHT_MISSING = {97, 98, 99}   # DHS missing / don't know codes, if present
 
 CLASSES = ["grid", "solar", "unserved"]
-HOUSEHOLD_COLS = ["hv001", "hv005", "hv025", "hv206", "hv262"]
+HOUSEHOLD_COLS = ["hv001", "hv005", "hv009", "hv025", "hv206", "hv262"]   # hv009 = household members
 
 
 # ---------------------------------------------------------------- file helpers
@@ -132,6 +133,20 @@ def cluster_labels(hh: pd.DataFrame) -> pd.DataFrame:
     return counts.join(shares).reset_index().rename(columns={"hv001": "cluster"})
 
 
+def mean_household_size(hh: pd.DataFrame) -> float:
+    """Weighted mean number of household members (hv009). One aggregate number, used to turn population into households."""
+    ok = hh["hv009"].notna()
+    return float((hh.loc[ok, "weight"] * hh.loc[ok, "hv009"]).sum() / hh.loc[ok, "weight"].sum())
+
+
+def household_sizes(hh: pd.DataFrame) -> dict:
+    """Weighted mean household size overall, and in urban (hv025 = 1) and rural (hv025 = 2) households."""
+    out = {"mean_household_size": mean_household_size(hh)}
+    for code, name in [(1, "urban"), (2, "rural")]:
+        out[f"{name}_household_size"] = mean_household_size(hh[hh["hv025"] == code])
+    return out
+
+
 def summary_table(hh: pd.DataFrame, country: str) -> pd.DataFrame:
     rows = {"national": weighted_shares(hh)}
     for code, name in [(1, "urban"), (2, "rural")]:
@@ -182,6 +197,11 @@ def run_country(name: str, cfg: dict, buffers: dict) -> None:
     label_dir = repo_path("data/restricted/labels")
     label_dir.mkdir(parents=True, exist_ok=True)
     labels.to_csv(label_dir / f"{name}_cluster_labels.csv", index=False)
+
+    sizes = {k: round(v, 3) for k, v in household_sizes(hh).items()}
+    (label_dir / f"{name}_household_size.json").write_text(json.dumps({**sizes, "n_households": len(hh)}))
+    print(f"  household size, members: all {sizes['mean_household_size']:.2f}, urban {sizes['urban_household_size']:.2f}, "
+          f"rural {sizes['rural_household_size']:.2f} (aggregates, used to turn population into households)")
 
     summary = summary_table(hh, name)
     out_dir = repo_path("outputs")

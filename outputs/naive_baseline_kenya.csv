@@ -1,0 +1,41 @@
+metric,value,ci_low,ci_high,n,note
+cell_n_shared,495123.0,,,495123,lights = night_lights_bm
+cell_spearman,-0.444696086517985,,,495123,lights = night_lights_bm
+cell_jaccard_cells,0.017362538012657188,,,495123,lights = night_lights_bm
+cell_naive_in_ours_cells,0.03413245006361965,,,495123,lights = night_lights_bm
+cell_jaccard_households,0.052409685412783916,,,495123,lights = night_lights_bm
+cell_naive_in_ours_households,0.056871973812729563,,,495123,lights = night_lights_bm
+cell_chance_share,0.1,,,495123,lights = night_lights_bm
+cell_naive_top_cells,49864.0,,,495123,lights = night_lights_bm
+cell_naive_top_no_reality,0.0005414728060324081,,,495123,lights = night_lights_bm
+cell_naive_top_flagged,0.7684655957323066,,,495123,lights = night_lights_bm
+cell_all_flagged,0.7557898410049897,,,495123,lights = night_lights_bm
+cell_naive_top_solar,0.3760143503428347,,,495123,lights = night_lights_bm
+cell_national_solar,0.2861349403350304,,,495123,lights = night_lights_bm
+cell_naive_top_reality,0.4092357844710404,,,495123,lights = night_lights_bm
+cell_national_reality,0.4172464655307407,,,495123,lights = night_lights_bm
+cell_n_shared_sens_neighbourhood,495123.0,,,495123,lights = night_lights_bm_r2km (sensitivity)
+cell_spearman_sens_neighbourhood,-0.4365059578301618,,,495123,lights = night_lights_bm_r2km (sensitivity)
+cell_jaccard_cells_sens_neighbourhood,0.017895872950609036,,,495123,lights = night_lights_bm_r2km (sensitivity)
+cell_naive_in_ours_cells_sens_neighbourhood,0.03516248258033244,,,495123,lights = night_lights_bm_r2km (sensitivity)
+cell_jaccard_households_sens_neighbourhood,0.05054022225549262,,,495123,lights = night_lights_bm_r2km (sensitivity)
+cell_naive_in_ours_households_sens_neighbourhood,0.05458902712045682,,,495123,lights = night_lights_bm_r2km (sensitivity)
+cell_chance_share_sens_neighbourhood,0.1,,,495123,lights = night_lights_bm_r2km (sensitivity)
+cell_naive_top_cells_sens_neighbourhood,49864.0,,,495123,lights = night_lights_bm_r2km (sensitivity)
+cell_naive_top_no_reality_sens_neighbourhood,0.0007420182897481148,,,495123,lights = night_lights_bm_r2km (sensitivity)
+cell_naive_top_flagged_sens_neighbourhood,0.759681527385035,,,495123,lights = night_lights_bm_r2km (sensitivity)
+cell_all_flagged_sens_neighbourhood,0.7557898410049897,,,495123,lights = night_lights_bm_r2km (sensitivity)
+cell_naive_top_solar_sens_neighbourhood,0.37265826604925306,,,495123,lights = night_lights_bm_r2km (sensitivity)
+cell_national_solar_sens_neighbourhood,0.2861349403350304,,,495123,lights = night_lights_bm_r2km (sensitivity)
+cell_naive_top_reality_sens_neighbourhood,0.4049562236086253,,,495123,lights = night_lights_bm_r2km (sensitivity)
+cell_national_reality_sens_neighbourhood,0.4172464655307407,,,495123,lights = night_lights_bm_r2km (sensitivity)
+cluster_spearman_naive,-0.13006207575771828,,,1117,"survey unserved / (solar + unserved), spatial CV"
+cluster_auc_naive,0.40657867187964886,,,1117,top tercile vs rest
+cluster_spearman_lights,0.2277658523509106,,,1117,"survey unserved / (solar + unserved), spatial CV"
+cluster_auc_lights,0.6494109168486729,,,1117,top tercile vs rest
+cluster_spearman_ours,0.541121851313717,,,1117,"survey unserved / (solar + unserved), spatial CV"
+cluster_auc_ours,0.8200381717242732,,,1117,top tercile vs rest
+cluster_spearman_diff,0.6711839270714353,0.5161833672935962,0.8157331174815569,1117,"ours minus naive, 95% interval from resampling districts"
+cluster_spearman_diff_vs_lights,0.3133559989628064,0.22032065000478251,0.4038865792660416,1117,"ours minus lights, 95% interval from resampling districts"
+cluster_auc_diff,0.4134594998446243,0.32285035601711554,0.5048338180504424,1117,"ours minus naive, 95% interval from resampling districts"
+cluster_auc_diff_vs_lights,0.17062725487560026,0.10295850044829293,0.23723558586992086,1117,"ours minus lights, 95% interval from resampling districts"

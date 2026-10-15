@@ -15,7 +15,7 @@ Coverage is checked with nested spatial folds: calibrate on four folds, test on 
 The "do not trust" mask has two flags: the widest model.uncertainty.flag_widest_share of cells, ranked
 by their widest share range (value 1), and cell features outside the range seen at the clusters
 (value 2). Both = 3, fine = 0. The width flag is a ranking, not an absolute limit: a fixed 0.4 limit
-flagged 94% of cells, because cluster-level noise dominates the ranges.
+flagged most cells (94% in Rwanda), because cluster-level noise dominates the ranges.
 
 Inputs:  as src.predict, plus data/restricted/features/<country>_train_table.csv (RESTRICTED)
 Outputs (aggregated, safe to publish):
@@ -31,8 +31,9 @@ import pandas as pd
 from rasterio.transform import from_origin
 
 from src.config import check_restricted_is_ignored, load_config, repo_path, run_paths
-from src.predict import (DEMO_NOTICE, LIMITATIONS, NODATA, cells_to_raster, layer_sources, mask_unpopulated,
+from src.predict import (DEMO_NOTICE, NODATA, cells_to_raster, layer_sources, mask_unpopulated,
                          predict_cells, write_share_raster)
+from src.country_text import labels_tag, limitations_text
 from src.train import CLASSES, SHARE_COLS, cross_validate, make_logistic_model, make_splits
 
 WIDTH_FLAG, EXTRAPOLATION_FLAG = 1, 2
@@ -214,17 +215,15 @@ def main(argv=None) -> None:
                   f"{ucfg['coverage']:.0%}. Range = prediction +/- bin half-width, clipped to 0..1. "
                   "Grid, solar and unserved are bounded separately, so the three ranges do not sum to 1.",
         "coverage_check": "Nested spatial coverage: " + ", ".join(f"{c} {nested[c]:.0%}" for c in CLASSES),
-        "labels": "Rwanda DHS 2025 (DHS-8), restricted data. Only model-derived outputs are published.",
+        "labels": "Synthetic clusters." if args.demo else labels_tag(cfg["countries"][args.country]),
         "feature_sources": "Synthetic." if args.demo else
-                           "; ".join(layer_sources(features, repo_path(cfg["gee"]["out_dir"]))),
-        "limitations": LIMITATIONS + " The range is calibrated on cluster-level errors, which include "
+                           "; ".join(layer_sources(features, repo_path(cfg["gee"]["out_dir"]), args.country)),
+        "limitations": (DEMO_NOTICE if args.demo else limitations_text(cfg["countries"][args.country], len(train)))
+                       + " The range is calibrated on cluster-level errors, which include "
                        "household sampling noise (about 25 households per cluster) and GPS displacement, so it is "
                        "wider than the uncertainty of the true cell share. Coverage holds on average across "
                        "districts, not for every cell.",
     }
-    if args.demo:
-        tags.update(labels="Synthetic clusters.",
-                    limitations=DEMO_NOTICE + " " + tags["limitations"])
     shape, rows, cols = (spec["height"], spec["width"]), cells["row"].to_numpy(), cells["col"].to_numpy()
     for k, cls in enumerate(CLASSES):
         for side, values in [("low", low), ("high", high)]:
@@ -232,11 +231,13 @@ def main(argv=None) -> None:
                                cells_to_raster(values[:, k], rows, cols, shape), transform, spec["crs"],
                                {**tags, "title": f"{side.capitalize()} end of the {ucfg['coverage']:.0%} range "
                                                  f"for the {cls} share, 1 km", "band": f"share_{cls}_{side}"})
+    has_prediction = ~np.isnan(low).any(axis=1)
+    fixed_limit_share = float(((high - low).max(axis=1)[has_prediction] >= 0.4).mean())
     write_share_raster(out_dir / f"{args.country}_do_not_trust.tif", cells_to_raster(codes, rows, cols, shape),
                        transform, spec["crs"],
                        {**tags, "title": "Do-not-trust mask, 1 km", "band": "do_not_trust",
                         "unit": f"code: 0 fine, 1 among about the widest {ucfg['flag_widest_share']:.0%} of ranges (a ranking, "
-                                f"widest share range at or above {cut_off:.2f}; a fixed 0.4 limit would flag 94% of cells), "
+                                f"widest share range at or above {cut_off:.2f}; a fixed 0.4 limit would flag {100 * fixed_limit_share:.0f}% of cells), "
                                 "2 features outside the range seen at survey clusters, 3 both"})
     print(f"\nWrote 6 range rasters and the mask to {out_dir}")
 

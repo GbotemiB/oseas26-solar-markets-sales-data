@@ -80,6 +80,24 @@ If a layer fails or times out, rerun it as a Drive export, e.g.
 All settings (paths, radius, thresholds, GOGLA scenarios) are in `config.yaml`. Rasters are git-ignored:
 publish the final ones through a release, not git.
 
+## Other countries (Kenya, Nigeria)
+
+The same pipeline runs for any country in `config.yaml` that has DHS data in `data/restricted/dhs/<country>/`:
+use the commands in the table above with `--country kenya` or `--country nigeria` (or `make pipeline COUNTRY=kenya`).
+Wording in the output tags and the report comes from `countries.<country>` in `config.yaml` (name, survey, fieldwork,
+notes), so a Kenya run is never labelled as Rwanda. Two differences:
+
+- **No external control totals.** The census, EICV7 and GOGLA inputs exist only for Rwanda (`external_checks: true`).
+  For other countries the control-totals and calibration steps are skipped, and the report says so. The map is then
+  checked only against the survey it was trained on, plus the naive baseline: treat levels with more caution.
+- **Household counts.** Rwanda uses the sourced EICV7 household count. Other countries divide population by the mean
+  household size of the DHS survey (one aggregate number, written by `src.labels_dhs` to
+  `data/restricted/labels/<country>_household_size.json`); without that file the count layers are skipped.
+- **Comparison.** `python -m src.cross_country` (or `make compare`) puts the country runs side by side in
+  `outputs/cross_country_summary.md`: scores, solar test, naive baseline and map-vs-survey national shares.
+- **Nigeria label.** Households with electricity but a torch as main light are counted as grid (`label_rule:
+  electricity_then_lighting`), so its grid share mixes access with supply. The report and tags say so.
+
 ## The market-reality layer
 
 `rwanda_market_reality_eae.tif` holds, per 1 km cell, **unserved / (solar + unserved)**: the unserved share

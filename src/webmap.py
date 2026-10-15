@@ -171,8 +171,8 @@ def build(country: str, demo: bool, out_path) -> dict:
     images["flag"] = png_data_uri(flag_image(np.where(geo["flag"] == NODATA, -1, np.rint(geo["flag"]))))
 
     outlines = {"type": "FeatureCollection", "features": []}
-    boundary_file = repo_path(cfg["boundaries"]["out_dir"]) / "RWA_ADM2.geojson"
-    if not demo and boundary_file.exists():
+    boundary_file = None if demo else repo_path(cfg["boundaries"]["out_dir"]) / f"{cfg['countries'][country]['iso3']}_ADM2.geojson"
+    if boundary_file is not None and boundary_file.exists():
         districts = gpd.read_file(boundary_file)[["shapeName", "geometry"]]
         districts["geometry"] = districts.geometry.simplify(0.003)
         outlines = json.loads(districts.to_json())
