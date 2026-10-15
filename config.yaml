@@ -160,3 +160,11 @@ countries:
     household_file: NGHR8BFL.dta
     gps_file: NGGE8AFL.shp
     label_rule: electricity_then_lighting
+
+# Naive "dense and dark" baseline (src.naive_baseline): population x darkness, compared with our market-reality layer.
+# Also uses eae.min_nongrid_share and model.min_cell_population.
+naive_baseline:
+  top_fraction: 0.1             # cells in the "top" set for the overlap tests (top 10%)
+  cluster_top_fraction: 0.3333  # clusters in the "top" group for the AUC test (top tercile of unserved / (solar + unserved))
+  lights_column: night_lights_bm   # cell night lights; falls back to the neighbourhood column if this one is missing
+  n_boot: 1000                  # bootstrap draws over districts for the interval on the difference

@@ -1,6 +1,6 @@
 """Validation report: random vs spatial CV, uncertainty coverage, control totals, solar test.
 
-Run (after src.train, src.uncertainty, src.validate, src.solar_test):
+Run (after src.train, src.uncertainty, src.validate, src.solar_test, and optionally src.naive_baseline):
     python -m src.report --country rwanda
 
 Reads the aggregate result files in outputs/ and writes outputs/validation_report_<country>.md.
@@ -104,9 +104,28 @@ def solar_test_table(test: pd.DataFrame) -> pd.DataFrame:
     return test[["model", "n_clusters", "mae", "skill", "auc_solar_majority"]].copy()
 
 
+def naive_text(naive: pd.DataFrame) -> list:
+    """Headline lines of the naive-baseline comparison (outputs/naive_baseline_<country>.csv)."""
+    v = naive.set_index("metric")
+    pct = lambda m: f"{100 * v.loc[m, 'value']:.0f}%"
+    ci = lambda m: f"{v.loc[m, 'value']:+.2f} (95% interval {v.loc[m, 'ci_low']:+.2f} to {v.loc[m, 'ci_high']:+.2f})"
+    return [f"- Cells: Spearman correlation between the naive index and our layer {v.loc['cell_spearman', 'value']:.2f}. "
+            f"{pct('cell_naive_in_ours_cells')} of the naive top 10% is also in our top 10% ({pct('cell_naive_in_ours_households')} "
+            f"counted in unserved households; chance {pct('cell_chance_share')}). Our mask flags {pct('cell_naive_top_flagged')} of "
+            f"the naive top 10%; predicted solar share there is {pct('cell_naive_top_solar')} against "
+            f"{pct('cell_national_solar')} nationally.",
+            f"- Held-out districts ({int(v.loc['cluster_auc_ours', 'n'])} clusters): AUC for the top tercile of the survey "
+            f"unserved / (solar + unserved) is {v.loc['cluster_auc_naive', 'value']:.2f} for the naive index, "
+            f"{v.loc['cluster_auc_lights', 'value']:.2f} for night lights alone and {v.loc['cluster_auc_ours', 'value']:.2f} "
+            f"for our model. Ours minus naive: {ci('cluster_auc_diff')}.",
+            "- Same folds as section 1. The naive index and lights are not fitted; our model is. Section 4 scores the error "
+            "of the solar share, this section scores the ranking, so the two tests need not agree. Details in "
+            "`naive_baseline_<country>.md`.", ""]
+
+
 # ---------------------------------------------------------------- report
 def build_report(country: str, cv: pd.DataFrame, coverage: pd.DataFrame, target: float, mask: dict,
-                 control: pd.DataFrame, provinces: pd.DataFrame, solar: pd.DataFrame) -> str:
+                 control: pd.DataFrame, provinces: pd.DataFrame, solar: pd.DataFrame, naive: pd.DataFrame = None) -> str:
     cvt = cv_table(cv)
     f = cv_findings(cvt)
     prov = province_table(provinces).sort_values("grid_pred_minus_eicv7")
@@ -173,7 +192,11 @@ def build_report(country: str, cv: pd.DataFrame, coverage: pd.DataFrame, target:
              "district).",
              "- The decision rule (clearly better than night lights) is **not met**. The market-reality layer is a "
              "low-confidence hypothesis.", "",
-             "## 5. What was not validated", "",
+             *(["## 5. Comparison with the naive \"dense and dark\" index", "",
+                "Naive index = population x darkness (from night lights), the method the challenge brief warns about. "
+                "Compared with our layer at cell level and, on held-out districts, against the survey.", ""]
+               + naive_text(naive) if naive is not None else []),
+             f"## {5 if naive is None else 6}. What was not validated", "",
              "- No direct check of the solar vs unserved split below province level (only the rough sector proxy above).",
              "- The World Bank Multi-Tier Framework (MTF) data was not used.",
              "- GOGLA sales are national and affiliate-only; see `calibration_note_" + country + ".md`. The maps are not rescaled.",
@@ -193,10 +216,12 @@ def main(argv=None) -> None:
 
     with rasterio.open(out / f"{c}_do_not_trust.tif") as src:
         mask = mask_summary(src.read(1))
+    naive_path = out / f"naive_baseline_{c}.csv"
     text = build_report(
         c, pd.read_csv(out / f"cv_results_{c}.csv"), pd.read_csv(out / f"uncertainty_coverage_{c}.csv"),
         cfg["model"]["uncertainty"]["coverage"], mask, pd.read_csv(out / f"control_totals_summary_{c}.csv"),
-        pd.read_csv(out / f"control_totals_provinces_{c}.csv"), pd.read_csv(out / f"solar_vs_unserved_test_{c}.csv"))
+        pd.read_csv(out / f"control_totals_provinces_{c}.csv"), pd.read_csv(out / f"solar_vs_unserved_test_{c}.csv"),
+        pd.read_csv(naive_path) if naive_path.exists() else None)
     path = out / f"validation_report_{c}.md"
     path.write_text(text)
     print(f"Wrote {path} ({len(text.split())} words)")

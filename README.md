@@ -26,6 +26,19 @@ rule is easy: do not read it as the accuracy of the Rwanda map.
 
 Tests (all use synthetic data): `python -m pytest -q`
 
+Shortcuts with `make` (run `make help` for the list):
+
+```bash
+make test       # the tests
+make demo       # the synthetic demo, same as python -m src.demo
+make demo-map   # the demo, then docs/demo_map.html
+make pipeline   # the real Rwanda run from the features to the report and web map (needs DHS data)
+```
+
+`make pipeline` reruns only the steps whose output is missing or older than the step before it.
+`make -n pipeline` previews what would run, `make -B pipeline` redoes everything. `make download` fetches the
+open inputs; the Google Earth Engine layers are a separate command (see the pipeline table).
+
 ## Data access (for the real Rwanda run)
 
 Labels come from DHS (Demographic and Health Surveys). DHS data is free but **not open**:
@@ -78,10 +91,17 @@ Treat it as a **low-confidence hypothesis**. Separating solar from unserved is o
 open data (held-out error 0.185, 8% better than a flat map, not clearly better than night lights alone),
 so the values are a gradient, not a clear split. Use it with `rwanda_do_not_trust.tif`.
 
+**Naive baseline** (`python -m src.naive_baseline --country rwanda`): population x darkness, the method the
+challenge brief warns about. At cell level it correlates -0.18 with our layer, and only 13% of its top decile is
+in our top decile (10% by chance). On held-out districts, night lights alone and the naive index rank the survey
+value unserved / (solar + unserved) no better than chance (AUC 0.39 and 0.48); our model reaches 0.70 (ours minus
+naive +0.22, 95% interval +0.10 to +0.34). This is still a low-confidence hypothesis: 53% of the naive top decile is
+also flagged by our do-not-trust mask. Results: `outputs/naive_baseline_rwanda.{csv,md}`.
+
 ## Reports
 
-- `outputs/validation_report_rwanda.md`: random vs spatial CV, uncertainty coverage, control totals, solar test
-  (regenerate with `python -m src.report --country rwanda`)
+- `outputs/validation_report_rwanda.md`: random vs spatial CV, uncertainty coverage, control totals, solar test,
+  naive baseline (regenerate with `python -m src.report --country rwanda`)
 - `outputs/limitations_rwanda.md`: one-page limitations statement
 - `outputs/calibration_note_rwanda.md`: survey-based solar total vs GOGLA sales
 

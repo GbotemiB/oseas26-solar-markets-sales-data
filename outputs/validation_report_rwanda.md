@@ -84,7 +84,15 @@ The market-reality layer depends on separating solar from unserved households. T
 - The model (0.185) is only 8% better than a flat map and -0.007 vs night lights alone (0.192); the 95% interval of that difference is [-0.016, +0.001] (paired bootstrap by district).
 - The decision rule (clearly better than night lights) is **not met**. The market-reality layer is a low-confidence hypothesis.
 
-## 5. What was not validated
+## 5. Comparison with the naive "dense and dark" index
+
+Naive index = population x darkness (from night lights), the method the challenge brief warns about. Compared with our layer at cell level and, on held-out districts, against the survey.
+
+- Cells: Spearman correlation between the naive index and our layer -0.18. 13% of the naive top 10% is also in our top 10% (18% counted in unserved households; chance 10%). Our mask flags 53% of the naive top 10%; predicted solar share there is 23% against 20% nationally.
+- Held-out districts (389 clusters): AUC for the top tercile of the survey unserved / (solar + unserved) is 0.48 for the naive index, 0.39 for night lights alone and 0.70 for our model. Ours minus naive: +0.22 (95% interval +0.10 to +0.34).
+- Same folds as section 1. The naive index and lights are not fitted; our model is. Section 4 scores the error of the solar share, this section scores the ranking, so the two tests need not agree. Details in `naive_baseline_<country>.md`.
+
+## 6. What was not validated
 
 - No direct check of the solar vs unserved split below province level (only the rough sector proxy above).
 - The World Bank Multi-Tier Framework (MTF) data was not used.

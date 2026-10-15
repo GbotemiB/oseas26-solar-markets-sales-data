@@ -1,0 +1,26 @@
+metric,value,ci_low,ci_high,n,note
+cell_n_shared,1436.0,,,1436,lights = night_lights_bm_r2km
+cell_spearman,-0.8777628919870759,,,1436,lights = night_lights_bm_r2km
+cell_jaccard_cells,0.0,,,1436,lights = night_lights_bm_r2km
+cell_naive_in_ours_cells,0.0,,,1436,lights = night_lights_bm_r2km
+cell_jaccard_households,0.0,,,1436,lights = night_lights_bm_r2km
+cell_naive_in_ours_households,0.0,,,1436,lights = night_lights_bm_r2km
+cell_chance_share,0.1,,,1436,lights = night_lights_bm_r2km
+cell_naive_top_cells,158.0,,,1436,lights = night_lights_bm_r2km
+cell_naive_top_no_reality,0.08227848101265822,,,1436,lights = night_lights_bm_r2km
+cell_naive_top_flagged,0.4873417721518987,,,1436,lights = night_lights_bm_r2km
+cell_all_flagged,0.6924050632911393,,,1436,lights = night_lights_bm_r2km
+cell_naive_top_solar,0.3027196245476404,,,1436,lights = night_lights_bm_r2km
+cell_national_solar,0.19667105898697598,,,1436,lights = night_lights_bm_r2km
+cell_naive_top_reality,0.37664224768467536,,,1436,lights = night_lights_bm_r2km
+cell_national_reality,0.40412441345069205,,,1436,lights = night_lights_bm_r2km
+cluster_spearman_naive,-0.2444666385843326,,,123,"survey unserved / (solar + unserved), spatial CV"
+cluster_auc_naive,0.38675261244888687,,,123,top tercile vs rest
+cluster_spearman_lights,0.010925379510433156,,,123,"survey unserved / (solar + unserved), spatial CV"
+cluster_auc_lights,0.469980690595184,,,123,top tercile vs rest
+cluster_spearman_ours,0.13936451117376514,,,123,"survey unserved / (solar + unserved), spatial CV"
+cluster_auc_ours,0.6187573830077238,,,123,top tercile vs rest
+cluster_spearman_diff,0.38383114975809773,0.03604011162890942,0.7795479528479827,123,"ours minus naive, 95% interval from resampling districts"
+cluster_spearman_diff_vs_lights,0.12843913166333198,-0.10908998623822595,0.3138467164080073,123,"ours minus lights, 95% interval from resampling districts"
+cluster_auc_diff,0.2320047705588369,-0.05866780642161825,0.39786038229855475,123,"ours minus naive, 95% interval from resampling districts"
+cluster_auc_diff_vs_lights,0.14877669241253977,-0.020486526592493292,0.2395328697634055,123,"ours minus lights, 95% interval from resampling districts"
