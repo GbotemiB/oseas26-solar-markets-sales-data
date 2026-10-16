@@ -82,3 +82,18 @@ def test_demo_map_is_self_contained_labelled_and_matches_the_rasters(sandbox):
     hh, hh_unserved = np.array(payload["values"]["hh"]), np.array(payload["values"]["hh_unserved"])
     assert (hh_unserved[ok] <= hh[ok] + 1).all()                            # unserved households never exceed households
     assert "hh_unserved" in payload["layers"] and "market" in payload["layers"]
+
+
+def test_market_note_follows_the_countrys_own_solar_test():
+    from src.webmap import market_note
+    weak = market_note(0.0766, False)
+    assert "LOW CONFIDENCE" in weak and "only 8% better" in weak
+    strong = market_note(0.22, True)
+    assert "LOW CONFIDENCE" not in strong and "22% better" in strong and "still a hypothesis" in strong
+
+
+def test_market_colour_range_is_fixed_unless_the_layer_is_squeezed_near_one():
+    from src.webmap import MARKET_RANGE, market_colour_range
+    assert market_colour_range(np.array([0.5, 0.6, 0.7, 0.8])) == MARKET_RANGE
+    lo, hi = market_colour_range(np.linspace(0.82, 0.99, 100))
+    assert 0.8 <= lo < 0.85 and 0.95 <= hi <= 1.0

@@ -43,11 +43,29 @@ LAYERS = {                                # key: (title, colormap, vmin, vmax, n
 }
 FLAG_TEXT = {0: "no flag", 1: "wide range (among the widest 25%)", 2: "features outside the range seen at survey clusters",
              3: "wide range and features outside the survey range"}
-BANNER = "Model estimate, not a census. Trained on survey clusters (DHS 2025) and open satellite layers."
+BANNER = "Model estimate, not a census. Trained on survey clusters ({survey}) and open satellite layers."
 DEMO_BANNER = "SYNTHETIC DEMO DATA: a made-up country that shows the pipeline runs. Not Rwanda. Nothing here is real."
 
 
 # ---------------------------------------------------------------- pure helpers
+def market_colour_range(values: np.ndarray) -> tuple:
+    """Display range of the market-reality colour scale. Fixed at MARKET_RANGE, unless most cells sit above it (solar is a
+    small share of non-grid households, as in Nigeria): then the 5th to 95th percentile, so the map is not one flat colour."""
+    if np.median(values) < 0.9:
+        return MARKET_RANGE
+    lo, hi = np.quantile(values, [0.05, 0.95])
+    return float(np.floor(lo * 100) / 100), float(np.ceil(hi * 100) / 100)
+
+
+def market_note(skill: float, rule_met: bool, vmin: float = MARKET_RANGE[0], vmax: float = MARKET_RANGE[1]) -> str:
+    """Note under the market-reality layer, worded from the country's own solar-vs-unserved test."""
+    verdict = (f"Better supported here: {100 * skill:.0f}% better than a flat map and better than night lights alone at separating "
+               "solar from unserved, but still a hypothesis from one survey." if rule_met else
+               f"LOW CONFIDENCE: a hypothesis, only {100 * skill:.0f}% better than a flat map at separating solar from unserved.")
+    return ("Unserved share among households without grid. 1 = off-grid solar market has not arrived, 0 = it has succeeded. "
+            f"{verdict} Colour scale fixed {vmin:.2f} to {vmax:.2f} for display. Cells where fewer than 20% of households lack grid are left empty.")
+
+
 def to_percent(array: np.ndarray) -> np.ndarray:
     """Whole percent (0 to 100) as int16, -1 where the raster has no value (NODATA or NaN)."""
     out = np.full(array.shape, -1, dtype=np.int16)
@@ -165,7 +183,14 @@ def build(country: str, demo: bool, out_path) -> dict:
     values["flag"] = np.where(geo["flag"] == NODATA, -1, np.rint(geo["flag"])).astype(np.int16)
     values["district"] = geo_district
     layers = {**LAYERS, "hh_unserved": count_layer(np.quantile(geo["hh_unserved"][geo["hh_unserved"] != NODATA], 0.99))}
-    payload = build_payload(values, names, [[south, west], [north, east]], DEMO_BANNER if demo else BANNER, layers)
+    if not demo:
+        test = pd.read_csv(out_dir / f"solar_vs_unserved_test_{country}.csv").set_index("model").loc["ratio model (7 core features)"]
+        market = layers["market"]
+        vmin, vmax = market_colour_range(geo["market"][geo["market"] != NODATA])
+        layers["market"] = (market[0], market[1], vmin, vmax,
+                            market_note(float(test["skill"]), bool(test["ci_high_vs_lights_only"] < 0), vmin, vmax))
+        banner = BANNER.format(survey=cfg["countries"][country]["survey"].split(" (")[0])
+    payload = build_payload(values, names, [[south, west], [north, east]], DEMO_BANNER if demo else banner, layers)
 
     images = {key: png_data_uri(colorize(geo[key], spec[1], spec[2], spec[3])) for key, spec in layers.items()}
     images["flag"] = png_data_uri(flag_image(np.where(geo["flag"] == NODATA, -1, np.rint(geo["flag"]))))
