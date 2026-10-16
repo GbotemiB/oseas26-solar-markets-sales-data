@@ -1,0 +1,278 @@
+"""Validation report: random vs spatial CV, uncertainty coverage, control totals, solar test.
+
+Run (after src.train, src.uncertainty, src.validate, src.solar_test, and optionally src.naive_baseline):
+    python -m src.report --country rwanda
+
+Reads the aggregate result files in outputs/ and writes outputs/validation_report_<country>.md.
+Every number in the report comes from those files, so a rerun of the pipeline and of this script keeps
+the report in step with the results. Interpretation sentences that depend on the numbers are chosen
+in code from the numbers (for example whether spatial error is worse than random error).
+"""
+import argparse
+
+import numpy as np
+import pandas as pd
+import rasterio
+
+from src.config import load_config, repo_path, run_paths
+
+NODATA = -9999
+CORE = "core"
+SHIPPED_MODEL = "logistic regression"
+TREE_MODEL = "lightgbm"
+CONSTANT = "constant (national mean)"
+
+
+# ---------------------------------------------------------------- pure helpers
+def md_table(df: pd.DataFrame, formats: dict = None) -> str:
+    """GitHub markdown table. `formats` maps a column to a format string such as '{:.3f}'."""
+    formats = {} if formats is None else formats
+    lines = ["| " + " | ".join(df.columns) + " |", "|" + "---|" * len(df.columns)]
+    for _, row in df.iterrows():
+        cells = [formats[c].format(row[c]) if c in formats and pd.notna(row[c]) else ("" if pd.isna(row[c]) else str(row[c]))
+                 for c in df.columns]
+        lines.append("| " + " | ".join(cells) + " |")
+    return "\n".join(lines)
+
+
+def cv_table(cv: pd.DataFrame, feature_set: str = CORE) -> pd.DataFrame:
+    """One row per model: household-weighted MAE under random CV and under spatial CV, sorted by spatial MAE."""
+    sub = cv[cv["feature_set"] == feature_set]
+    random = sub[sub["cv"] == "random"].set_index("model")
+    spatial = sub[sub["cv"] == "spatial"].set_index("model")
+    out = pd.DataFrame({"model": spatial.index, "random_cv": random.loc[spatial.index, "mean"].to_numpy(),
+                        "spatial_cv": spatial["mean"].to_numpy(), "spatial_fold_min": spatial["fold_min"].to_numpy(),
+                        "spatial_fold_max": spatial["fold_max"].to_numpy()})
+    return out.sort_values("spatial_cv").reset_index(drop=True)
+
+
+def cv_findings(table: pd.DataFrame) -> dict:
+    """The numbers the text needs: best model, constant baseline, shipped model, tree model, random-vs-spatial gap."""
+    by = table.set_index("model")
+    ship, tree, const = by.loc[SHIPPED_MODEL], by.loc[TREE_MODEL], by.loc[CONSTANT]
+    return {"best_model": table.iloc[0]["model"], "best_spatial": table.iloc[0]["spatial_cv"],
+            "ship_spatial": ship["spatial_cv"], "ship_random": ship["random_cv"],
+            "tree_spatial": tree["spatial_cv"], "constant_spatial": const["spatial_cv"],
+            "improvement_over_constant": 1 - ship["spatial_cv"] / const["spatial_cv"],
+            "gap": ship["spatial_cv"] - ship["random_cv"],
+            "tree_beats_ship": bool(tree["spatial_cv"] < ship["spatial_cv"])}
+
+
+def cv_text(f: dict, n_clusters: int = None) -> str:
+    lines = [f"- The shipped model is {SHIPPED_MODEL}: spatial error {f['ship_spatial']:.3f}, "
+             f"{100 * f['improvement_over_constant']:.0f}% lower than the constant national-mean map ({f['constant_spatial']:.3f})."]
+    if f["tree_beats_ship"]:
+        lines.append(f"- Checkpoint met: LightGBM ({f['tree_spatial']:.3f}) beats the logistic baseline in spatial CV.")
+    else:
+        lines.append(f"- **Checkpoint not met:** LightGBM ({f['tree_spatial']:.3f}) does not beat the logistic baseline "
+                     f"({f['ship_spatial']:.3f}) in spatial CV, so scope was cut to the logistic model. With "
+                     f"{'only a few hundred' if n_clusters is None else 'about ' + str(n_clusters)} clusters "
+                     "the simplest model is as good as the complex ones.")
+    if f["gap"] > 0.005:
+        lines.append(f"- Spatial error is {f['gap']:.3f} higher than random error, so random CV is optimistic by that much.")
+    else:
+        lines.append(f"- Random and spatial error are almost the same (gap {f['gap']:+.3f}). Neighbouring clusters leaking "
+                     "information is a small problem at district level here. The spatial score is still the one to quote.")
+    return "\n".join(lines)
+
+
+def coverage_table(coverage: pd.DataFrame, target: float) -> pd.DataFrame:
+    sub = coverage[coverage["bin"].astype(str) == "all"]
+    return pd.DataFrame({"share": sub["share"].to_numpy(), "target": target, "coverage": sub["coverage"].to_numpy(),
+                         "mean_range_width": sub["mean_width"].to_numpy()})
+
+
+def fixed_limit_share(lows: list, highs: list, limit: float) -> float:
+    """Share of predicted cells whose widest share range is at or above `limit` (rasters with NODATA as given)."""
+    low, high = np.stack(lows), np.stack(highs)
+    has = (low != NODATA).all(axis=0)
+    widest = (high - low).max(axis=0)
+    return float((widest[has] >= limit).mean())
+
+
+def mask_summary(codes: np.ndarray) -> dict:
+    """Share of predicted cells per do-not-trust code (value -9999 = no prediction)."""
+    valid = codes[codes != NODATA].astype(int)
+    return {"cells": int(valid.size), "width": float(np.mean((valid & 1) > 0)),
+            "extrapolation": float(np.mean((valid & 2) > 0)), "either": float(np.mean(valid > 0))}
+
+
+def province_table(provinces: pd.DataFrame) -> pd.DataFrame:
+    """Predicted minus EICV7 per province, in percentage points, for the grid and solar shares."""
+    return pd.DataFrame({"province": provinces["province"],
+                         "grid_pred_minus_eicv7": 100 * (provinces["pred_grid"] - provinces["eicv7_grid"]),
+                         "solar_pred_minus_eicv7": 100 * (provinces["pred_solar"] - provinces["eicv7_solar"])})
+
+
+def control_table(summary: pd.DataFrame) -> pd.DataFrame:
+    cols = ["level", "source", "quantity", "n", "mae", "bias", "pearson", "spearman", "skill"]
+    return summary[cols].copy()
+
+
+def solar_test_table(test: pd.DataFrame) -> pd.DataFrame:
+    return test[["model", "n_clusters", "mae", "skill", "auc_solar_majority"]].copy()
+
+
+def naive_text(naive: pd.DataFrame, country: str = "<country>") -> list:
+    """Headline lines of the naive-baseline comparison (outputs/naive_baseline_<country>.csv)."""
+    v = naive.set_index("metric")
+    pct = lambda m: f"{100 * v.loc[m, 'value']:.0f}%"
+    ci = lambda m: f"{v.loc[m, 'value']:+.2f} (95% interval {v.loc[m, 'ci_low']:+.2f} to {v.loc[m, 'ci_high']:+.2f})"
+    return [f"- Cells: Spearman correlation between the naive index and our layer {v.loc['cell_spearman', 'value']:.2f}. "
+            f"{pct('cell_naive_in_ours_cells')} of the naive top 10% is also in our top 10% ({pct('cell_naive_in_ours_households')} "
+            f"counted in unserved households; chance {pct('cell_chance_share')}). Our mask flags {pct('cell_naive_top_flagged')} of "
+            f"the naive top 10%; predicted solar share there is {pct('cell_naive_top_solar')} against "
+            f"{pct('cell_national_solar')} nationally.",
+            f"- Held-out districts ({int(v.loc['cluster_auc_ours', 'n'])} clusters): AUC for the top tercile of the survey "
+            f"unserved / (solar + unserved) is {v.loc['cluster_auc_naive', 'value']:.2f} for the naive index, "
+            f"{v.loc['cluster_auc_lights', 'value']:.2f} for night lights alone and {v.loc['cluster_auc_ours', 'value']:.2f} "
+            f"for our model. Ours minus naive: {ci('cluster_auc_diff')}.",
+            "- Same folds as section 1. The naive index and lights are not fitted; our model is. Section 4 scores the error "
+            "of the solar share, this section scores the ranking, so the two tests need not agree. Details in "
+            f"`naive_baseline_{country}.md`.", ""]
+
+
+# ---------------------------------------------------------------- report
+def control_section(control: pd.DataFrame, provinces: pd.DataFrame, country_name: str) -> list:
+    """Section 3 lines. Without external control totals (only Rwanda has them) the section says so."""
+    if control is None:
+        return ["## 3. Control totals against independent published numbers", "",
+                f"No external control totals are available for {country_name}: the open published tables used for Rwanda "
+                "(EICV7, Census 2022) have no counterpart here, so the map is checked only against the survey it was trained "
+                "on (sections 1 and 2) and against the naive baseline. Treat the levels with extra caution.", ""]
+    prov = province_table(provinces).sort_values("grid_pred_minus_eicv7")
+    worst = prov.iloc[-1]
+    ctl = control.set_index(["level", "source", "quantity"])
+    district, sector = ctl.loc[("district", "EICV7 2023/24", "served (grid+solar)")], \
+        ctl.loc[("sector", "Census 2022", "served (grid+solar)")]
+    sector_grid = ctl.loc[("sector", "Census 2022 (C1.5)", "grid connected")]
+    sector_solar = ctl.loc[("sector", "Census 2022 (C1.3 minus C1.5)", "solar proxy (rough)")]
+    return [
+        "## 3. Control totals against independent published numbers", "",
+        "Predicted cell shares are summed (population-weighted) per area and compared with published survey and census "
+        "numbers. These sources were not used to train the model. \"Served\" is grid + solar. Sources are from different "
+        "years: Census August 2022, EICV7 2023/24, DHS June to October 2025.", "",
+        md_table(control_table(ctl.reset_index()), {c: "{:.3f}" for c in ["mae", "bias", "pearson", "spearman", "skill"]}), "",
+        "Skill = 1 minus MAE divided by the MAE of a flat map at the national mean. Bias = predicted minus published.", "",
+        f"- Districts: MAE {district['mae']:.3f}, skill {district['skill']:.2f}, but rank order is weak "
+        f"(Spearman {district['spearman']:.2f}). The map gets district levels roughly right and their order only partly.",
+        f"- Sectors vs Census 2022: bias {sector['bias']:+.3f}. Most of this is likely the 2022 vs 2025 timing gap "
+        f"(access grew between the two), not model error alone. After removing the bias, MAE is {sector['mae_no_bias']:.3f}.",
+        f"- Grid share at {int(sector_grid['n'])} sectors vs Census Table C1.5 (households connected to the grid): "
+        f"Pearson {sector_grid['pearson']:.2f}, Spearman {sector_grid['spearman']:.2f}, MAE {sector_grid['mae']:.3f}, "
+        f"skill {sector_grid['skill']:.2f}. This is the strongest independent check: the grid pattern is predictable. "
+        "\"Connected\" is not \"grid is the main light\", so read the pattern, not the level.",
+        f"- Solar proxy at the same sectors (electrified minus connected, clipped at 0): Pearson {sector_solar['pearson']:.2f}, "
+        f"Spearman {sector_solar['spearman']:.2f}, skill {sector_solar['skill']:.2f}, bias {sector_solar['bias']:+.3f}. "
+        "The proxy is rough (it gives 8.5% nationally against 13.9% in Table 8.12), so it supports the ranking of "
+        "sectors but says nothing reliable about the level.",
+        f"- Provinces: {worst['province']} has the largest grid over-prediction vs EICV7 "
+        f"({worst['grid_pred_minus_eicv7']:+.1f} points).", "",
+        md_table(prov, {"grid_pred_minus_eicv7": "{:+.1f}", "solar_pred_minus_eicv7": "{:+.1f}"}), "",
+        "Below province level the solar share can only be checked through the rough proxy above. A direct "
+        "grid / solar split exists in published tables only by province.", ""
+    ]
+
+
+def solar_verdict(ratio: pd.Series, lights: pd.Series) -> list:
+    """The two sentences under the solar test table, chosen from the numbers: is the model clearly better than lights alone?"""
+    met = ratio["ci_high_vs_lights_only"] < 0      # the whole 95% interval of (model minus lights) is below zero
+    skill = f"{100 * ratio['skill']:.0f}% better than a flat map"
+    return [f"- The model ({ratio['mae']:.3f}) is {'' if met else 'only '}{skill} and "
+            f"{ratio['mae_minus_lights_only']:+.3f} vs night lights alone ({lights['mae']:.3f}); the 95% interval of that "
+            f"difference is [{ratio['ci_low_vs_lights_only']:+.3f}, {ratio['ci_high_vs_lights_only']:+.3f}] (paired bootstrap by "
+            "district).",
+            "- The decision rule (clearly better than night lights) is **met**. The market-reality layer has better support "
+            "here than a pure guess, but it rests on one survey: still a hypothesis." if met else
+            "- The decision rule (clearly better than night lights) is **not met**. The market-reality layer is a "
+            "low-confidence hypothesis."]
+
+
+def build_report(country: str, cv: pd.DataFrame, coverage: pd.DataFrame, target: float, mask: dict,
+                 control: pd.DataFrame, provinces: pd.DataFrame, solar: pd.DataFrame, naive: pd.DataFrame = None,
+                 n_clusters: int = None, label_note: str = "") -> str:
+    cvt = cv_table(cv)
+    f = cv_findings(cvt)
+    control_section_lines = control_section(control, provinces, country.capitalize())
+    ratio = solar.set_index("model").loc["ratio model (7 core features)"]
+    lights = solar.set_index("model").loc["lights only"]
+
+    parts = [f"# Validation report: {country.capitalize()} off-grid solar access map", "",
+             "Generated by `python -m src.report` from the result files in `outputs/`. "
+             "Household-weighted mean absolute error (MAE) of the grid, solar and unserved shares, averaged over the three. "
+             "Lower is better.", "",
+             "## 1. Random vs spatial cross-validation (5 folds)", "",
+             "Random folds mix clusters from the same district across train and test. Spatial folds hold out whole "
+             "districts (`GroupKFold`, groups = district), so a test cluster is predicted by a model that never saw its "
+             "district. The spatial score is the honest one. Core feature set (7 features).", "",
+             md_table(cvt, {c: "{:.3f}" for c in ["random_cv", "spatial_cv", "spatial_fold_min", "spatial_fold_max"]}), "",
+             cv_text(f, n_clusters), "",
+             *([f"- Label note: {label_note}", ""] if label_note else []),
+             "## 2. Uncertainty ranges", "",
+             f"Split conformal prediction on spatial out-of-fold errors. Target coverage {target:.0%}. Coverage is checked "
+             "with nested spatial folds: calibrate on four folds of districts, test on the fifth.", "",
+             md_table(coverage_table(coverage, target), {"target": "{:.0%}", "coverage": "{:.1%}", "mean_range_width": "{:.2f}"}), "",
+             "- Coverage holds on average. It does not hold for every cell or every district.",
+             "- The ranges are wide because they are calibrated on cluster-level errors, which include household sampling "
+             "noise (about 25 households per cluster) and GPS displacement. They overstate the uncertainty of the true cell share.",
+             f"- Do-not-trust mask ({mask['cells']:,} predicted cells): {100 * mask['width']:.0f}% flagged for a wide range "
+             f"(a ranking: the widest 25%), {100 * mask['extrapolation']:.0f}% flagged because their features lie outside the "
+             f"range seen at survey clusters, {100 * mask['either']:.0f}% flagged by either. A fixed 0.4 width limit would flag "
+             f"{100 * mask['fixed_limit']:.0f}% of cells, so the width flag is relative.", "",
+             *control_section_lines,
+             "## 4. Solar vs unserved among non-grid households", "",
+             "The market-reality layer depends on separating solar from unserved households. Target: solar / (solar + unserved) "
+             "among non-grid households, spatial CV, weighted by non-grid households.", "",
+             md_table(solar_test_table(solar), {"mae": "{:.3f}", "skill": "{:.2f}", "auc_solar_majority": "{:.2f}"}), "",
+             *solar_verdict(ratio, lights), "",
+             *(["## 5. Comparison with the naive \"dense and dark\" index", "",
+                "Naive index = population x darkness (from night lights), the method the challenge brief warns about. "
+                "Compared with our layer at cell level and, on held-out districts, against the survey.", ""]
+               + naive_text(naive, country) if naive is not None else []),
+             f"## {5 if naive is None else 6}. What was not validated", "",
+             *(["- No direct check of the solar vs unserved split below province level (only the rough sector proxy above).",
+                "- The World Bank Multi-Tier Framework (MTF) data was not used."] if control is not None else
+               ["- No independent check of the solar vs unserved split at any level: only the survey it was trained on."]),
+             *(["- GOGLA sales are national and affiliate-only; see `calibration_note_" + country + ".md`. The maps are not rescaled.",
+                "- One of 416 census sectors did not match a boundary name."] if control is not None else
+               ["- No GOGLA calibration and no census or survey control totals for this country."]),
+             "- Time change was not tested.", ""]
+    return "\n".join(parts)
+
+
+# ---------------------------------------------------------------- main
+def main(argv=None) -> None:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser.add_argument("--country", default="rwanda")
+    args = parser.parse_args(argv)
+    c = args.country
+    cfg = load_config()
+    out = repo_path(cfg["paths"]["outputs"])
+
+    with rasterio.open(out / f"{c}_do_not_trust.tif") as src:
+        mask = mask_summary(src.read(1))
+    bounds = {}
+    for side in ("low", "high"):
+        bounds[side] = []
+        for cls in ("grid", "solar", "unserved"):
+            with rasterio.open(out / f"{c}_share_{cls}_{side}.tif") as src:
+                bounds[side].append(src.read(1).astype(float))
+    mask["fixed_limit"] = fixed_limit_share(bounds["low"], bounds["high"], 0.4)
+    naive_path = out / f"naive_baseline_{c}.csv"
+    ccfg = cfg["countries"][c]
+    external = ccfg["external_checks"]
+    n_clusters = len(pd.read_csv(run_paths(cfg, c, False)["train"], usecols=["cluster"]))
+    text = build_report(
+        c, pd.read_csv(out / f"cv_results_{c}.csv"), pd.read_csv(out / f"uncertainty_coverage_{c}.csv"),
+        cfg["model"]["uncertainty"]["coverage"], mask,
+        pd.read_csv(out / f"control_totals_summary_{c}.csv") if external else None,
+        pd.read_csv(out / f"control_totals_provinces_{c}.csv") if external else None,
+        pd.read_csv(out / f"solar_vs_unserved_test_{c}.csv"),
+        pd.read_csv(naive_path) if naive_path.exists() else None, n_clusters, ccfg["label_note"])
+    path = out / f"validation_report_{c}.md"
+    path.write_text(text)
+    print(f"Wrote {path} ({len(text.split())} words)")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,8 @@
+scenario,lifetime_years,units_per_household,households,share_of_households,kind,share
+low,2.5,1.5,209666.66666666666,0.06373215069157996,GOGLA-implied,
+central,3.5,1.2,424166.6666666667,0.12893348450721065,GOGLA-implied,
+high,5.0,1.0,879000.0,0.267188682629088,GOGLA-implied,
+Our map (trained on DHS 2025),,,646917.7992357392,,survey,0.19664290619693514
+"DHS 2025 (survey, household-weighted)",,,644843.5825011047,,survey,0.196012408771663
+EICV7 2023/24,,,726903.0233982905,,survey,0.2209559285789424
+Census 2022 (solar + lantern),,,496358.92201417376,,survey,0.15087768655763517

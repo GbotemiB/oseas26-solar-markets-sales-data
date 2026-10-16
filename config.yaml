@@ -1,0 +1,188 @@
+# All paths are relative to the repo root. No hard-coded paths in code.
+
+paths:
+  raw: data/raw
+  restricted: data/restricted
+  processed: data/processed
+  demo: data/demo
+  outputs: outputs
+
+grid:
+  resolution_m: 1000          # final map cell size
+  feature_resolution_m: 100   # GEE features are exported at this size, then aggregated
+  crs_export: "EPSG:4326"     # lat/lon, if EAE (Energy Access Explorer) needs it
+
+# Open downloads other than GEE
+downloads:
+  gridfinder_url: https://zenodo.org/api/records/3628142/files/grid.gpkg/content
+  gridfinder_dir: data/raw/gridfinder
+  osm_dir: data/raw/osm
+
+# NISR (National Institute of Statistics of Rwanda) tables used to check the maps, not to train them
+nisr:
+  out_dir: data/raw/nisr
+  files:
+    eicv7_tables.xlsx: https://statistics.gov.rw/sites/default/files/documents/2025-04/EICV7_Tables_MainIndicatorReport.xlsx
+    census2022_housing.xlsx: https://statistics.gov.rw/sites/default/files/documents/2025-02/Housing_and%20Households%20Characteristics%20Thematic_Report.xlsx
+
+# GOGLA (Global Off-Grid Lighting Association) calibration note (src.calibrate). Lifetimes and units per household
+# are OUR assumptions (lanterns about 2 to 3 years, home systems about 5), not GOGLA numbers: the report gives none.
+calibration:
+  reference_year: 2025                    # the DHS fieldwork year
+  households_total: 3289810               # EICV7 2023/24, Table 5.11 (3,289.81 thousand households)
+  # GOGLA Global Off-Grid Solar Market Report 2025, Figure 19: Rwanda solar energy kit sales, thousand units.
+  # Affiliate companies only; lanterns and solar home systems together.
+  gogla_sales_thousands: {2021: 237, 2022: 266, 2023: 123, 2024: 171, 2025: 82}
+  scenarios:
+    low: {lifetime_years: 2.5, units_per_household: 1.5}
+    central: {lifetime_years: 3.5, units_per_household: 1.2}
+    high: {lifetime_years: 5.0, units_per_household: 1.0}
+
+# Market-reality layer for EAE (Energy Access Explorer), src.export_eae
+eae:
+  # Cells where the predicted non-grid share is below this are no-data. The ratio unserved / (solar + unserved) rests on
+  # few households there, and at 0.05 the highest values were town edges (69% of cells above 0.8 had under 20% non-grid).
+  min_nongrid_share: 0.2
+  utm_file_suffix: utm        # the UTM (grid) version is kept next to the EPSG:4326 headline file
+
+# Google Earth Engine
+gee:
+  project: ml4eo-ebolarin-2026
+  out_dir: data/raw/gee
+  drive_folder: oseas26_gee   # only used with --drive
+
+# Feature layers pulled from GEE. Years are chosen to sit close to the DHS fieldwork.
+gee_features:
+  worldpop_year: 2020          # latest WorldPop year in the GEE catalog
+  viirs_start: "2024-01-01"    # night lights: median of monthly composites
+  viirs_end: "2026-01-01"
+  ghsl_epoch: 2020             # GHSL (Global Human Settlement Layer) built-up surface epoch
+
+# geoBoundaries admin levels to download (Rwanda: 1 = provinces, 2 = districts, 3 = sectors)
+boundaries:
+  levels: [ADM0, ADM1, ADM2, ADM3]
+  out_dir: data/raw/boundaries
+
+# Modelling. Feature names are the layer names in the train table (src/features.py).
+model:
+  seed: 42
+  cv_folds: 5
+  # One neighbourhood radius for training clusters AND prediction cells. Spatial CV (logistic, core features):
+  # 2 km everywhere 0.154, own urban/rural radius 0.155, 5 km everywhere 0.162, guessed urban flag 0.158.
+  # So 2 km everywhere is as good and needs no urban/rural guess for cells. Must be one of buffers_m.
+  buffer_m: 2000
+  # Cells whose OWN population is below this (people per 1 km cell) are left empty in every output.
+  # The 2 km neighbourhood would otherwise fill parks and lakes with a prediction.
+  min_cell_population: 1
+  # Uncertainty ranges (src.uncertainty): conformal intervals from spatial out-of-fold errors.
+  uncertainty:
+    coverage: 0.8                         # share of true cluster values the range should contain
+    n_bins: 4                             # bins by predicted value; each bin gets its own range width
+    min_bin_clusters: 20                  # smaller bins use the pooled width
+    # "Do not trust" flag 1: the widest this share of cells, ranked by their widest share range. A fixed
+    # 0.4 limit would flag 94% of cells (cluster noise dominates the range), so this is a ranking.
+    flag_widest_share: 0.25
+    extrapolation_percentiles: [1, 99]    # cells outside this feature range of the clusters are flagged
+  log_features: [population, built_up_surface, night_lights_bm, night_lights_noaa,
+                 dist_gridfinder, dist_power_osm, dist_road_major, dist_town, dist_market]   # log1p before use
+  # Feature sets are compared in the same run. plus_osm adds distances to grid, roads, towns, markets.
+  feature_sets:
+    core:
+      baseline: [population, built_up_surface, night_lights_bm, travel_time_city,
+                 travel_time_health, slope, elevation]
+      all: [population, built_up_surface, night_lights_bm, night_lights_noaa,
+            travel_time_city, travel_time_health, slope, elevation]   # used by all tree models
+    plus_osm:
+      baseline: [population, built_up_surface, night_lights_bm, travel_time_city,
+                 travel_time_health, slope, elevation,
+                 dist_gridfinder, dist_power_osm, dist_road_major, dist_town, dist_market]
+      all: [population, built_up_surface, night_lights_bm, night_lights_noaa,
+            travel_time_city, travel_time_health, slope, elevation,
+            dist_gridfinder, dist_power_osm, dist_road_major, dist_town, dist_market]
+  lightgbm:                      # one model per share, objective cross_entropy (targets 0-1)
+    num_leaves: 15
+    min_child_samples: 10
+    n_estimators: 300
+    learning_rate: 0.05
+  # Other models. One fixed, fairly strong regularisation each (no big search: 560 clusters only).
+  lightgbm_regularised: {num_leaves: 7, min_child_samples: 30, n_estimators: 100, learning_rate: 0.05, reg_lambda: 10}
+  random_forest: {n_estimators: 500, min_samples_leaf: 10, max_features: 0.5}
+  extra_trees: {n_estimators: 500, min_samples_leaf: 10, max_features: 0.5}
+  elastic_net: {solver: saga, l1_ratio: 0.5, C: 0.3, max_iter: 5000}     # on baseline_features
+  xgboost: {n_estimators: 150, max_depth: 3, learning_rate: 0.05, min_child_weight: 5, reg_lambda: 10, subsample: 0.8}
+  catboost: {iterations: 300, depth: 4, learning_rate: 0.05, l2_leaf_reg: 10}
+
+# DHS GPS points are displaced on purpose (urban up to 2 km, rural up to 5 km).
+# Features are averaged inside these buffers, never read at a single pixel.
+buffers_m:
+  urban: 2000
+  rural: 5000
+
+# DHS (Demographic and Health Surveys) files. RESTRICTED: never commit.
+# File names are matched inside the zip without caring about upper/lower case.
+#
+# label_rule:
+#   lighting                   grid = hv262 == 1, solar = hv262 == 2, unserved = everything else
+#   electricity_then_lighting  solar = hv262 == 2, grid = hv206 == 1 (and not solar), unserved = rest
+#                              Used for Nigeria: many grid households light with torches
+#                              during power cuts, so hv262 alone would miss them.
+countries:
+  rwanda:
+    geofabrik: africa/rwanda
+    code: RW
+    iso3: RWA
+    crs_work: "EPSG:32735"   # UTM 35S, metres
+    district_level: ADM2   # used as groups for spatial cross-validation
+    survey: "DHS 2025 (DHS-8)"
+    dhs_dir: data/restricted/dhs/rwanda
+    household_file: RWHR91FL.dta
+    gps_file: RWGE91FL.shp
+    label_rule: lighting
+    display_name: Rwanda
+    fieldwork: "June to October 2025"
+    external_checks: true   # NISR (EICV7, Census 2022) and GOGLA inputs exist: control totals and calibration note
+    unserved_note: "Unserved here is mostly torch users (about 26% nationally), not the official access gap (about 12%)."
+    label_note: ""
+    frame_note: ""
+  kenya:
+    geofabrik: africa/kenya
+    code: KE
+    iso3: KEN
+    crs_work: "EPSG:32737"   # UTM 37S (Kenya spans 36-37; fine for distances), metres
+    district_level: ADM2   # used as groups for spatial cross-validation
+    survey: "DHS 2022 (DHS-8)"
+    dhs_dir: data/restricted/dhs/kenya
+    household_file: KEHR8CFL.dta
+    gps_file: KEGE8AFL.shp
+    label_rule: lighting
+    display_name: Kenya
+    fieldwork: "2022"
+    external_checks: false
+    unserved_note: "Unserved here means no grid and no solar as the main light source (mostly torch and fuel lighting), not the official access gap."
+    label_note: ""
+    frame_note: "National shares from the map are about 8 points lower on grid and 7 higher on unserved than the survey. Mostly this is weighting: the map weights cells by people, the survey weights households, and urban households are smaller; WorldPop also places more people in the remote north-east than the survey sample does. Cell predictions are unbiased where clusters exist. Quote rankings, not national levels."
+  nigeria:
+    geofabrik: africa/nigeria
+    code: NG
+    iso3: NGA
+    crs_work: "EPSG:32632"   # UTM 32N (Nigeria spans 31-33), metres
+    district_level: ADM2   # used as groups for spatial cross-validation
+    survey: "DHS 2023-24 (DHS-8)"
+    dhs_dir: data/restricted/dhs/nigeria
+    household_file: NGHR8BFL.dta
+    gps_file: NGGE8AFL.shp
+    label_rule: electricity_then_lighting
+    display_name: Nigeria
+    fieldwork: "2023 to 2024"
+    external_checks: false
+    unserved_note: "Unserved here means no electricity and no solar as the main light source (mostly torch and fuel lighting), not the official access gap."
+    label_note: "Households with electricity whose main light is a torch (power cuts) are counted as grid, so the grid share mixes grid access with grid supply (flag share_grid_unreliable)."
+    frame_note: "National shares from the map are about 6 points lower on grid and 6 higher on unserved than the survey, mostly because the map weights cells by people and the survey weights households (urban households are smaller, and WorldPop puts fewer people in urban cells than the survey sample does). Quote rankings, not national levels."
+
+# Naive "dense and dark" baseline (src.naive_baseline): population x darkness, compared with our market-reality layer.
+# Also uses eae.min_nongrid_share and model.min_cell_population.
+naive_baseline:
+  top_fraction: 0.1             # cells in the "top" set for the overlap tests (top 10%)
+  cluster_top_fraction: 0.3333  # clusters in the "top" group for the AUC test (top tercile of unserved / (solar + unserved))
+  lights_column: night_lights_bm   # cell night lights; falls back to the neighbourhood column if this one is missing
+  n_boot: 1000                  # bootstrap draws over districts for the interval on the difference

@@ -1,0 +1,11 @@
+{
+  "title": "Share of households by main lighting source, 1 km",
+  "country": "demo",
+  "unit": "share of households (0 to 1); grid + solar + unserved = 1",
+  "method": "Multinomial logistic regression on 7 features, trained on DHS cluster shares weighted by households; features averaged within 2000 m circles.",
+  "labels": "Synthetic clusters.",
+  "feature_sources": "Synthetic.",
+  "year": "None, synthetic.",
+  "limitations": "SYNTHETIC DEMO DATA: made up by src/make_demo_data.py to show that the pipeline runs. It is not Rwanda, not DHS data, and the numbers mean nothing for any real place.",
+  "band": "share_solar"
+}

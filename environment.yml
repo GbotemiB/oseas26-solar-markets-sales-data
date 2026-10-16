@@ -1,0 +1,24 @@
+name: oseas26
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy
+  - pandas
+  - geopandas
+  - pyogrio
+  - rasterio
+  - rioxarray
+  - xarray
+  - scikit-learn
+  - lightgbm
+  - matplotlib
+  - scipy
+  - pytest
+  - xgboost
+  - catboost>=1.2.8   # older builds break with numpy 2
+  - pyyaml
+  - jupyterlab
+  - pip
+  - pip:
+      - earthengine-api

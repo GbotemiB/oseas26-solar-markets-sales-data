@@ -1,0 +1,11 @@
+{
+  "title": "Share of households by main lighting source, 1 km",
+  "country": "nigeria",
+  "unit": "share of households (0 to 1); grid + solar + unserved = 1",
+  "method": "Multinomial logistic regression on 7 features, trained on DHS cluster shares weighted by households; features averaged within 2000 m circles.",
+  "labels": "Nigeria DHS 2023-24 (DHS-8), restricted data. Only model-derived outputs are published.",
+  "feature_sources": "population: WorldPop/GP/100m/pop (2020) [CC BY 4.0]; built_up_surface: JRC/GHSL/P2023A/GHS_BUILT_S (2020) [CC BY 4.0]; night_lights_bm: NASA/VIIRS/002/VNP46A2 (Black Marble) median 2024-01-01 to 2026-01-01 [NASA open data, cite Black Marble (confirm)]; travel_time_city: projects/malariaatlasproject/assets/accessibility/accessibility_to_cities/2015_v1_0 [CC BY 4.0]; travel_time_health: projects/malariaatlasproject/assets/accessibility/accessibility_to_healthcare/2019 [CC BY 4.0]; slope: USGS/SRTMGL1_003 (ee.Terrain.slope on 100 m mean elevation) [Public domain]; elevation: USGS/SRTMGL1_003 [Public domain]",
+  "year": "Labels: fieldwork 2023 to 2024. Features: WorldPop 2020, VIIRS 2024-2025, GHSL 2020, Malaria Atlas Project travel time (2015 cities, 2019 health), SRTM",
+  "limitations": "Modelled estimate from 1380 survey clusters, not a census. Training label is the MAIN lighting source (DHS hv262), so households using grid plus solar count as grid. DHS cluster locations are displaced by up to 2 km (urban) and 5 km (rural). Solar versus unserved is separated less well than grid versus non-grid. Night lights and satellite layers cannot see small solar systems. Unserved here means no electricity and no solar as the main light source (mostly torch and fuel lighting), not the official access gap. Households with electricity whose main light is a torch (power cuts) are counted as grid, so the grid share mixes grid access with grid supply (flag share_grid_unreliable). National shares from the map are about 6 points lower on grid and 6 higher on unserved than the survey, mostly because the map weights cells by people and the survey weights households (urban households are smaller, and WorldPop puts fewer people in urban cells than the survey sample does). Quote rankings, not national levels.",
+  "band": "share_solar"
+}
